@@ -1,5 +1,67 @@
 # Changelog
 
+## [2.0.0](https://github.com/rvenutolo/claude-pgrep-pkill-guard/compare/v1.1.0...v2.0.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* raise the hook's bash floor to 4.4 ([#237](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/237))
+* the guard now requires bash 4.4 or newer. On bash 4.3 it reports itself INACTIVE for every command instead of guarding. Stock macOS bash 3.2 was already below the floor; Homebrew bash and current Linux distributions ship 5.x.
+
+### Features
+
+* accept a fixture dir in check-executable-bit ([ed648a5](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/ed648a50c8c8cfcc7803de8bdc6bd33fc49f6006)), closes [#322](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/322)
+* fail check-executable-bit on a row that matches nothing ([f138cfd](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/f138cfdbe77ffe6c6369228a4591c0fd31edab94)), closes [#322](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/322)
+* fail check-executable-bit on a row that matches nothing ([#326](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/326)) ([fa93a1b](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/fa93a1b887ff3573e358057d1b5593475f8c5586))
+* raise the hook's bash floor to 4.4 ([eb6f39e](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/eb6f39e29250cf5cfb7538316ac7a9a6bc9ed9cf)), closes [#209](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/209)
+* raise the hook's bash floor to 4.4 ([#237](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/237)) ([9d8601f](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/9d8601f5b4e95efec6fccc333e6534f83b74a896))
+* reject surplus arguments in optional-argument gates ([23061f3](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/23061f30735654b5d54103f49a6192e32c0b18df)), closes [#216](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/216)
+* reject surplus arguments in optional-argument gates ([#241](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/241)) ([3e970f3](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/3e970f30bfdf203e86669aa1bf70e0146262a337))
+
+
+### Bug Fixes
+
+* accept only an exact main "$@" as the last statement ([14fbfc5](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/14fbfc536ffbd7a38d669e75e2cc8b7418a67d4a))
+* blame multi-line quoted strings, not heredocs, in the kcov caveat ([66508a0](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/66508a06dd0bf61f139dcc894f9de0610743b2ce)), closes [#275](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/275)
+* build the one-true-awk shim once for a repeated --awk=bwk ([ea783f3](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/ea783f3d2cb048ceb36dbe2c33f0873dd15cff87))
+* declare three leaking function variables local ([23c1eaa](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/23c1eaa7a2019cc4e030ce0f995a6f7919f60bed)), closes [#222](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/222)
+* declare three leaking function variables local ([#256](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/256)) ([3f4ec1e](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/3f4ec1eed9eec9a765288a30d8ce193f9196537a))
+* drop issue numbers inherited from the dotfiles repo ([aacef4f](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/aacef4fffbc3d2d4a7d8fe38d9f74345f71d8c0b)), closes [#208](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/208)
+* drop issue numbers inherited from the dotfiles repo ([#236](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/236)) ([8670539](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/8670539e2494f3c7ee57567d448a4cd0d4e91e68))
+* drop the wrapper pipe carry when its own stdin is redirected ([2a3106e](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/2a3106e56dd1692e2bcf020607855e8f9f8416c9)), closes [#361](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/361)
+* drop the wrapper pipe carry when its own stdin is redirected ([#394](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/394)) ([161e8c6](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/161e8c6fbfc711af31cd84ed2ce4f661ef608909))
+* fail run-lint-checks on an empty Markdown file list ([c396f96](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/c396f96e39589f44e79fecca2c251dfffc5e7419))
+* fail run-lint-checks on an empty Markdown file list ([#375](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/375)) ([61cde21](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/61cde21002a15e00c7a5c3e85e11364d246e3e93))
+* guard host-bash scripts against bash older than 4.4 ([#233](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/233)) ([5823f95](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/5823f95ea3e3b00944ae70f9346c3a5939c5293a))
+* join an unquoted heredoc body line ending in a backslash ([f4b6f69](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/f4b6f695abec738b3bc24101631a7baf16081820)), closes [#362](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/362)
+* join an unquoted heredoc body line ending in a backslash ([#387](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/387)) ([9debe7b](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/9debe7b5381839730582cbdab3ded31f41975b91))
+* keep a prefix flag's value out of the wrapper pipe carry ([1fba663](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/1fba6639e640776dd0d1671473181fa2b37a96ff)), closes [#380](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/380)
+* keep a prefix flag's value out of the wrapper pipe carry ([#391](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/391)) ([3f6f74d](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/3f6f74dd8e5499e6a316540fcd53bc11ac4d8ace))
+* keep a wrapper open across a dup or clobber redirection ([9334fb8](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/9334fb808963742b1f08ff5288f5ede41e45773c)), closes [#392](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/392)
+* keep a wrapper open across a dup or clobber redirection ([#399](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/399)) ([ff988b4](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/ff988b40a9609f0203bc668641bc848f38580dd5))
+* keep lint config out of archives and build the awk shim once ([#381](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/381)) ([feb7748](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/feb77487af1a63917cb325f7e6408e9e67f29dcd))
+* keep prettier and shellcheck config out of release archives ([e010704](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/e010704d1e9413b43145daf55e674817e03aa504))
+* name a missing bench report by its relative path ([cd19b97](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/cd19b97752b8f0ad5691135b64cfa5d986fddec4))
+* quote EXIT-trap temp paths with printf %q ([#235](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/235)) ([9fa14d1](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/9fa14d101e3d0d80fa2053ed33dfd3215c23443d))
+* raise run-tests and in-devshell bash guards to 4.4 ([#234](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/234)) ([403b73d](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/403b73db173d0ceedeb692fd0cd6ebef10623885))
+* reject a malformed --report in run-all-checks ([e8a1541](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/e8a1541c6f7f5f20e352ecef859c1ad61896b8ab)), closes [#272](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/272)
+* reject a malformed --report in run-all-checks ([#287](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/287)) ([b8572de](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/b8572def572720c60ff3906f5a44ddd37aecfa06))
+* reject an unterminated one-line shebang in bats files ([25796a9](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/25796a93c1b2ae931e2d5e1ba3dcb04098b61b57)), closes [#305](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/305)
+* reject an unterminated one-line shebang in bats files ([#315](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/315)) ([2fd3f60](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/2fd3f60f1b8a345d9dff087e363ab7da7d041540))
+* skip a redirection in the backward walk from a pgrep ([23b2e78](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/23b2e780386f5184ff75e4192f2ac4b4996bd479))
+* skip a redirection while hunting for the command word ([1cefa83](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/1cefa8389bf7127a3d2327a9add64422b6e7e8fa)), closes [#397](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/397)
+* skip a redirection while hunting for the command word ([#403](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/403)) ([83b82fd](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/83b82fdcff6f9090950743cdb7eb4ccab36489b8))
+* skip the target of any redirection operator in pattern_operand ([8e12815](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/8e128158a7626f0545fee75d73d56445abe25eab))
+* skip the target of any redirection operator in pattern_operand ([#388](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/388)) ([c149d0a](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/c149d0a2e0987f7c3846f8e4480beec5f3e4a60a))
+* split a word at a redirection operator in the scanner ([3577f89](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/3577f89d6a8035f40eb6d116fa54645b1b7c93cd))
+* split a word at a redirection operator in the scanner ([#401](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/401)) ([446765c](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/446765c228f21296d8405acc23f98a8760c8b78c))
+* split ls-files --stage on the tab in check-executable-bit ([b5dd798](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/b5dd7981d6fedd1732c7d3f4c52b87a95ea3cd66)), closes [#322](https://github.com/rvenutolo/claude-pgrep-pkill-guard/issues/322)
+
+
+### Performance Improvements
+
+* scan files concurrently in the bash style gate ([57ef871](https://github.com/rvenutolo/claude-pgrep-pkill-guard/commit/57ef871f3767e90c3f4e2bb7d2762c1270e11306))
+
 ## [1.1.0](https://github.com/rvenutolo/claude-pgrep-pkill-guard/compare/v1.0.0...v1.1.0) (2026-09-10)
 
 ### Features
