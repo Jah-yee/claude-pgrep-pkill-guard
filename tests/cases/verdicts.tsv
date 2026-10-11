@@ -1139,3 +1139,21 @@
 "cat <<< 'pkill --full X' <&0 | bash"	deny:kill
 "bash <<< 'pkill --full X' <&0 < /tmp/f"	allow
 "bash <<< 'pkill --full X' <&0 <<'EOF'\necho PAYLOAD_RAN\nEOF"	allow
+"watch 'pkill --full X'"	deny:kill
+"watch -n 1 \"pkill --full X\""	deny:kill
+"watch pkill\\ --full\\ X"	deny:kill
+"watch -n1 'pkill --full X'"	deny:kill
+"watch --interval 2 'pkill --full X'"	deny:kill
+"watch -- 'pkill --full X'"	deny:kill
+"watch -n 1 -- 'pkill --full X'"	deny:kill
+"sudo watch 'pkill --full X'"	deny:kill
+"watch 'pkill' --full X"	deny:kill
+"watch 'echo PAYLOAD_RAN; pkill --full X'"	deny:kill
+"watch -x pkill --full X"	deny:kill
+"watch -x 'pkill --full X'"	allow
+"watch --exec 'pkill --full X'"	allow
+"watch -n 1 -x 'pkill --full X'"	allow
+"watch 'echo PAYLOAD_RAN'"	allow
+"watch -n 1 'echo PAYLOAD_RAN' 'pkill --full X'"	allow
+"watch -n 1 'pgrep -c java'"	allow
+"watch 'echo PAYLOAD_RAN' | cat"	allow
