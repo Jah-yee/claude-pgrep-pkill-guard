@@ -23,8 +23,9 @@ readonly -a COMMAND_POSITION_KEYWORDS=(
 # for the same reason the others do: `timeout 5 pkill --full java` runs the kill, and so
 # do `nice`, `ionice`, `stdbuf`, `setsid`, `chrt`, `taskset`, `unbuffer`, `watch`, `xargs`
 # and `exec`. A wrapper that is not listed hides what it runs: the guard sees nothing
-# behind `flock` or `strace`. `watch` also hands a single quoted operand to `sh -c`
-# (`watch 'pkill --full X'`), which the chain does not read.
+# behind `flock` or `strace`. `watch` also hands its operands to `sh -c`
+# (`watch 'pkill --full X'`); the chain cannot see into a quoted one, so
+# wrappers::shell_wrapper_payloads reads it as a payload.
 readonly -a PREFIX_COMMANDS=(
   'sudo' 'doas' 'env' 'nohup' 'command' 'time' 'timeout' 'nice' 'ionice' 'stdbuf' 'setsid'
   'chrt' 'taskset' 'unbuffer' 'watch' 'xargs' 'exec'

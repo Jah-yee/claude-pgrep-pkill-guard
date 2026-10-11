@@ -571,6 +571,22 @@ function wrappers::cut_substitutions() {
   cut_outer="${outer}"
 }
 
+# @description Print the script `watch` runs for its operands, NUL-terminated. `watch` joins its
+#              operands with single spaces and hands the result to `sh -c`, so the first operand and
+#              the words after it make up one command line.
+# @arg $1 first the first operand, quotes stripped
+# @arg $@ operands the operands after it, quotes stripped
+# @stdout the joined script, NUL-terminated
+function wrappers::watch_payload() {
+  local -r first="$1"
+  shift
+  local script="${first}" operand
+  for operand in "$@"; do
+    script+=" ${operand}"
+  done
+  printf '%s\0' "${script}"
+}
+
 # @description Find the payloads of local shell wrappers and print each one's raw text,
 #              NUL-terminated, with any surrounding quotes stripped.
 #
@@ -690,6 +706,14 @@ function wrappers::cut_substitutions() {
 #              like the group's heredoc. A `cat` that reads one, alone or in a group on the left
 #              of a pipe, hands it to the next stage.
 #
+#              `watch` is a payload source too: it joins its operands with spaces and runs the result
+#              through `sh -c`, so `watch 'pkill --full X'` runs the kill. The first operand after
+#              watch's options (and `--`) is read when it is a single fully quoted word or carries
+#              backslash escapes (`watch pkill\ --full\ X`), and the words after it join it, as
+#              wrappers::watch_payload does. A plain unquoted operand is already in command
+#              position for the prefix chain. With `-x` or `--exec` the operand is a program name,
+#              not a script, and nothing is read; `watch $'...'` is not read either.
+#
 #              Still not covered: content that is not on the command line at all
 #              (`printf '%s' "${script}" | bash`, `curl ... | bash`), a here-string that is not a
 #              literal, and a subshell closed inside a command substitution, where the region ends
@@ -763,6 +787,8 @@ function wrappers::shell_wrapper_payloads() {
   local group_moved=0 group_text='' group_here_set=0
   local acc_idx acc_heredoc acc_text acc_text_set acc_word acc_through group_piped=0 producers_open=0
   local -a seg_words=()
+  # `watch` tracking: it is the prefix whose operands are read as a script (see the capture below).
+  local watch_active=0 watch_exec=0 watch_dd=0 watch_first='' watch_first_set=0
   local pipe_heredoc='' pipe_text='' pipe_text_set=0 last_pipe_offset=-1
   local pending_text='' pending_text_set=0 pending_piped=0
   # A `<<` heredoc operator may carry a leading fd (`0<<`, `3<<-`), which is
@@ -1140,6 +1166,11 @@ function wrappers::shell_wrapper_payloads() {
     esac
 
     if tokens::is_operator "${token}"; then
+      if ((watch_first_set == 1)); then
+        wrappers::watch_payload "${watch_first}" "${seg_words[@]}"
+      fi
+      watch_active=0
+      watch_first_set=0
       if [[ "${token}" == '|' ]] && ((last_pipe_offset != offset - 1)); then
         wrappers::segment_pipe_carry pipe_heredoc pipe_text pipe_text_set \
           "${seg_cmd}" "${seg_heredoc}" "${seg_stdout_moved}" "${seg_stdin_kind}" \
@@ -1179,6 +1210,31 @@ function wrappers::shell_wrapper_payloads() {
     elif tokens::is_keyword "${token}"; then
       leading_pending=''
     fi
+    # `watch` runs its operands through `sh -c`, so a first operand the chain cannot see into (a
+    # quoted word, or one with backslash escapes) is a script. `-x`/`--exec` runs the operand as a
+    # program name instead, and nothing is read.
+    if ((watch_active == 1 && at_cmd == 1 && chain_skip == 0)) && ! tokens::is_operator "${token}" \
+      && ! tokens::is_keyword "${token}"; then
+      if ((watch_dd == 0)) && [[ "${token}" == '--' ]]; then
+        watch_dd=1
+      elif ((watch_dd == 0)) && [[ "${word}" == -* ]]; then
+        if [[ "${word}" == '--exec' || ("${word}" == -*x* && "${word}" != --*) ]]; then
+          watch_exec=1
+        fi
+      elif ! tokens::is_assignment_word "${token}"; then
+        watch_active=0
+        raw="${command:offset:${#token}}"
+        if ((watch_exec == 0)); then
+          if [[ ("${raw}" == \"*\" || "${raw}" == \'*\') && "${#raw}" -ge 2 ]]; then
+            watch_first="${raw:1:${#raw}-2}"
+            watch_first_set=1
+          elif [[ "${raw}" == *\\* ]]; then
+            watch_first="${raw//\\/}"
+            watch_first_set=1
+          fi
+        fi
+      fi
+    fi
     if tokens::prefix_chain_step "${token}" "${word}" "${at_cmd}" chain chain_skip chain_operands; then
       next_at_cmd=1
     else
@@ -1189,6 +1245,11 @@ function wrappers::shell_wrapper_payloads() {
     # and the chain step says so by setting `chain_skip`. Taking that option
     # for the command would drop the carry a wrapper further along the same
     # chain is about to claim (`echo '...' | sudo -u root bash`).
+    if ((at_cmd == 1)) && [[ "${word}" == 'watch' && "${chain}" == 'watch' ]]; then
+      watch_active=1
+      watch_exec=0
+      watch_dd=0
+    fi
     is_cmd_word=0
     if ((at_cmd == 1 && next_at_cmd == 0 && chain_skip == 0)); then
       is_cmd_word=1
@@ -1262,5 +1323,8 @@ function wrappers::shell_wrapper_payloads() {
   fi
   if ((in_wrapper == 1 && seg_here_set == 1)); then
     printf '%s\0' "${seg_here_text}"
+  fi
+  if ((watch_first_set == 1)); then
+    wrappers::watch_payload "${watch_first}" "${seg_words[@]}"
   fi
 }
