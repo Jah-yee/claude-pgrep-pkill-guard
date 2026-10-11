@@ -1157,3 +1157,9 @@
 "watch -n 1 'echo PAYLOAD_RAN' 'pkill --full X'"	allow
 "watch -n 1 'pgrep -c java'"	allow
 "watch 'echo PAYLOAD_RAN' | cat"	allow
+"watch sudo 'pkill --full X'"	deny:kill
+"watch env 'pkill --full X'"	deny:kill
+"watch timeout 5 'pkill --full X'"	deny:kill
+"watch -n 1 sudo 'pkill' --full X"	deny:kill
+"watch sudo 'echo PAYLOAD_RAN'"	allow
+"watch -x sudo 'pkill --full X'"	allow

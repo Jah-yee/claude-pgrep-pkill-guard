@@ -708,11 +708,11 @@ function wrappers::watch_payload() {
 #
 #              `watch` is a payload source too: it joins its operands with spaces and runs the result
 #              through `sh -c`, so `watch 'pkill --full X'` runs the kill. The first operand after
-#              watch's options (and `--`) is read when it is a single fully quoted word or carries
-#              backslash escapes (`watch pkill\ --full\ X`), and the words after it join it, as
-#              wrappers::watch_payload does. A plain unquoted operand is already in command
-#              position for the prefix chain. With `-x` or `--exec` the operand is a program name,
-#              not a script, and nothing is read; `watch $'...'` is not read either.
+#              watch's options (and `--`) is read, quotes stripped from a fully quoted word and
+#              backslashes dropped from an escaped one (`watch pkill\ --full\ X`), and the words after it join it, as
+#              wrappers::watch_payload does; a plain unquoted operand yields the same verdict through
+#              the prefix chain as through the script. With `-x` or `--exec` the operand is a program
+#              name, not a script, and nothing is read; `watch $'...'` is not read either.
 #
 #              Still not covered: content that is not on the command line at all
 #              (`printf '%s' "${script}" | bash`, `curl ... | bash`), a here-string that is not a
@@ -789,6 +789,7 @@ function wrappers::shell_wrapper_payloads() {
   local -a seg_words=()
   # `watch` tracking: it is the prefix whose operands are read as a script (see the capture below).
   local watch_active=0 watch_exec=0 watch_dd=0 watch_first='' watch_first_set=0
+  local -a watch_rest=()
   local pipe_heredoc='' pipe_text='' pipe_text_set=0 last_pipe_offset=-1
   local pending_text='' pending_text_set=0 pending_piped=0
   # A `<<` heredoc operator may carry a leading fd (`0<<`, `3<<-`), which is
@@ -1167,10 +1168,11 @@ function wrappers::shell_wrapper_payloads() {
 
     if tokens::is_operator "${token}"; then
       if ((watch_first_set == 1)); then
-        wrappers::watch_payload "${watch_first}" "${seg_words[@]}"
+        wrappers::watch_payload "${watch_first}" "${watch_rest[@]}"
       fi
       watch_active=0
       watch_first_set=0
+      watch_rest=()
       if [[ "${token}" == '|' ]] && ((last_pipe_offset != offset - 1)); then
         wrappers::segment_pipe_carry pipe_heredoc pipe_text pipe_text_set \
           "${seg_cmd}" "${seg_heredoc}" "${seg_stdout_moved}" "${seg_stdin_kind}" \
@@ -1210,9 +1212,19 @@ function wrappers::shell_wrapper_payloads() {
     elif tokens::is_keyword "${token}"; then
       leading_pending=''
     fi
-    # `watch` runs its operands through `sh -c`, so a first operand the chain cannot see into (a
-    # quoted word, or one with backslash escapes) is a script. `-x`/`--exec` runs the operand as a
-    # program name instead, and nothing is read.
+    # The operands after watch's first one. They are kept here and not in `seg_words`, which leaves out
+    # a word still in command position (`watch sudo '...'`).
+    if ((watch_first_set == 1)) && ! tokens::is_operator "${token}"; then
+      raw="${command:offset:${#token}}"
+      if [[ ("${raw}" == \"*\" || "${raw}" == \'*\') && "${#raw}" -ge 2 ]]; then
+        raw="${raw:1:${#raw}-2}"
+      fi
+      watch_rest+=("${raw}")
+    fi
+    # `watch` runs its operands through `sh -c`, so they are a script: a quoted word, or one with
+    # backslash escapes, is hidden from the prefix chain, and so is the quoted word after a prefix
+    # operand (`watch sudo '...'`). `-x`/`--exec` runs the operand as a program name instead, and
+    # nothing is read.
     if ((watch_active == 1 && at_cmd == 1 && chain_skip == 0)) && ! tokens::is_operator "${token}" \
       && ! tokens::is_keyword "${token}"; then
       if ((watch_dd == 0)) && [[ "${token}" == '--' ]]; then
@@ -1225,13 +1237,13 @@ function wrappers::shell_wrapper_payloads() {
         watch_active=0
         raw="${command:offset:${#token}}"
         if ((watch_exec == 0)); then
+          watch_first="${raw}"
           if [[ ("${raw}" == \"*\" || "${raw}" == \'*\') && "${#raw}" -ge 2 ]]; then
             watch_first="${raw:1:${#raw}-2}"
-            watch_first_set=1
           elif [[ "${raw}" == *\\* ]]; then
             watch_first="${raw//\\/}"
-            watch_first_set=1
           fi
+          watch_first_set=1
         fi
       fi
     fi
@@ -1240,16 +1252,16 @@ function wrappers::shell_wrapper_payloads() {
     else
       next_at_cmd=0
     fi
-    # Leaving command position marks the command word, with one exception: a
-    # prefix's value-taking option (`sudo -u`) leaves it only for its value,
-    # and the chain step says so by setting `chain_skip`. Taking that option
-    # for the command would drop the carry a wrapper further along the same
-    # chain is about to claim (`echo '...' | sudo -u root bash`).
     if ((at_cmd == 1)) && [[ "${word}" == 'watch' && "${chain}" == 'watch' ]]; then
       watch_active=1
       watch_exec=0
       watch_dd=0
     fi
+    # Leaving command position marks the command word, with one exception: a
+    # prefix's value-taking option (`sudo -u`) leaves it only for its value,
+    # and the chain step says so by setting `chain_skip`. Taking that option
+    # for the command would drop the carry a wrapper further along the same
+    # chain is about to claim (`echo '...' | sudo -u root bash`).
     is_cmd_word=0
     if ((at_cmd == 1 && next_at_cmd == 0 && chain_skip == 0)); then
       is_cmd_word=1
@@ -1325,6 +1337,6 @@ function wrappers::shell_wrapper_payloads() {
     printf '%s\0' "${seg_here_text}"
   fi
   if ((watch_first_set == 1)); then
-    wrappers::watch_payload "${watch_first}" "${seg_words[@]}"
+    wrappers::watch_payload "${watch_first}" "${watch_rest[@]}"
   fi
 }
