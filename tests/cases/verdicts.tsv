@@ -1576,3 +1576,29 @@
 "pgrep --full x | cat\n# note\nxargs kill"	allow
 "pgrep --full x | cat # note\necho y | xargs kill"	allow
 "pgrep --full x # note\necho y | xargs kill"	allow
+"time coproc pkill --full X"	deny:kill
+"time -p coproc pkill --full X"	deny:kill
+"coproc while pgrep --full x; do sleep 1; done"	deny:loop
+"coproc until ! pgrep --full x; do sleep 1; done"	deny:loop
+"coproc -x pkill --full X"	allow
+"> `echo f` pkill --full X"	deny:kill
+"2> `echo f` pkill --full X"	deny:kill
+"pgrep --full x > `echo f` | xargs kill"	deny:kill
+"echo hi > `echo f` pkill --full X"	allow
+"echo `echo f` pkill --full X"	allow
+"tee >(cat) pkill --full X"	allow
+"2>&1 >(cat) pkill --full X"	allow
+"< <(cat) pkill --full X"	deny:kill
+">> >(cat) pkill --full X"	deny:kill
+"FOO=1 2> >(cat) pkill --full X"	deny:kill
+"coproc P pkill --full X"	allow
+"FOO=1 coproc pkill --full X"	allow
+"env coproc pkill --full X"	allow
+"/usr/bin/coproc pkill --full X"	allow
+"! coproc pkill --full X"	deny:kill
+"coproc kill $(pgrep --full x)"	deny:kill
+"pgrep --full x | coproc xargs kill"	deny:kill
+"echo 'pkill --full X' | coproc bash"	deny:kill
+"pgrep --full x |&\n# note\nxargs kill"	deny:kill
+"pgrep --full x && echo y # note"	warn
+"echo a#b; pkill --full X"	deny:kill
