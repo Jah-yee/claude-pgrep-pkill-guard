@@ -152,7 +152,9 @@ function loops::loop_context() {
     # (`FOO=$(true) break`): that leaves command position where it was.
     if [[ "${kind}" == 'close' ]]; then
       at_cmd="${closed_assign}"
-    elif tokens::is_operator "${token}" || tokens::is_keyword "${token}"; then
+    elif tokens::is_operator "${token}" || tokens::is_keyword "${token}" \
+      || { ((at_cmd == 1)) && [[ "${token}" == 'coproc' ]]; }; then
+      # `coproc while ...` is still a loop: the reserved word keeps command position.
       at_cmd=1
     else
       at_cmd=0
@@ -351,7 +353,9 @@ function loops::body_has_terminator() {
     # (`FOO=$(true) break`): that leaves command position where it was.
     if [[ "${kind}" == 'close' ]]; then
       at_cmd="${closed_assign}"
-    elif tokens::is_operator "${token}" || tokens::is_keyword "${token}"; then
+    elif tokens::is_operator "${token}" || tokens::is_keyword "${token}" \
+      || { ((at_cmd == 1)) && [[ "${token}" == 'coproc' ]]; }; then
+      # `coproc while ...` is still a loop: the reserved word keeps command position.
       at_cmd=1
     else
       at_cmd=0
@@ -443,7 +447,9 @@ function loops::loop_body_has_kill() {
     # The close of a substitution ends a word, not a command, unless the word is an assignment.
     if tokens::is_word_region_close "${tokens_var}" "${openers_var}" "${idx}"; then
       at_cmd=0
-    elif tokens::is_operator "${token}" || tokens::is_keyword "${token}"; then
+    elif tokens::is_operator "${token}" || tokens::is_keyword "${token}" \
+      || { ((at_cmd == 1)) && [[ "${token}" == 'coproc' ]]; }; then
+      # `coproc while ...` is still a loop: the reserved word keeps command position.
       at_cmd=1
     else
       at_cmd=0

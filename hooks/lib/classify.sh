@@ -254,6 +254,10 @@ function classify::classify_command() {
   # a walk over the array can step over a whole region, or find the one that holds an invocation.
   # For a process substitution that is the `<` or `>` before the `(`, which belongs to the same
   # word.
+  #
+  # The scanner masks a comment like a quoted string, to one token of filler. The array holds
+  # COMMENT_TOKEN for a token of filler that starts at a `#`, so that a walk can tell a comment,
+  # which is no word of any command, from a quoted word.
   local -a cmd_tokens=() cmd_openers=() open_stack=()
   local -A region=()
   local raw_offset raw_token region_kind
@@ -269,6 +273,9 @@ function classify::classify_command() {
       'S') open_stack+=("$((${#cmd_tokens[@]} - 1))") ;;
       *) open_stack+=("${#cmd_tokens[@]}") ;;
     esac
+    if [[ "${raw_token}" == $'\001'* && "${command:raw_offset:1}" == '#' ]]; then
+      raw_token="${COMMENT_TOKEN}"
+    fi
     cmd_tokens+=("${raw_token}")
   done <<< "${tokens}"
 
