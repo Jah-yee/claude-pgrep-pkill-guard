@@ -453,6 +453,18 @@ function words() {
   assert_output 'echo $_x:-a_#b_ ; y'
 }
 
+@test "scanner: a comment emits no token" {
+  run words $'echo a # it\'s a note; x\necho b ;# c'
+  assert_output 'echo a <NL> echo b ;'
+}
+
+@test "scanner: the token after a comment keeps its byte offset" {
+  local out
+  out="$(scan $'x # c\ny')"
+  run grep --count "^6$(tab)y\$" <<< "${out}"
+  assert_output '1'
+}
+
 @test "scanner: a brace group stays a brace group" {
   run words '{ x; } ; echo {a,b}>f'
   assert_output '{ x ; } ; echo { a,b } > f'

@@ -1602,3 +1602,31 @@
 "pgrep --full x |&\n# note\nxargs kill"	deny:kill
 "pgrep --full x && echo y # note"	warn
 "echo a#b; pkill --full X"	deny:kill
+"bash <<'EOF' # note\npkill --full X\nEOF"	deny:kill
+"sudo bash <<EOF # note\npkill --full X\nEOF"	deny:kill
+"cat <<'EOF' | bash # note\npkill --full X\nEOF"	deny:kill
+"bash <<< 'pkill --full X' # c"	deny:kill
+"echo 'pkill --full X' | bash # c"	deny:kill
+"echo 'pkill --full X' | bash script.sh # c"	allow
+"echo 'pkill --full X' |\nbash"	deny:kill
+"echo 'pkill --full X' |&\nbash"	deny:kill
+"echo 'pkill --full X' |\n\n\nbash"	deny:kill
+"echo 'pkill --full X' | # note\nbash"	deny:kill
+"echo 'pkill --full X' |\n# note\nbash"	deny:kill
+"echo 'pkill --full X' |\nsudo bash"	deny:kill
+"echo 'pkill --full X' |\n{ bash; }"	deny:kill
+"cat <<'EOF' |\npkill --full X\nEOF\nbash"	deny:kill
+"echo 'pkill --full X'\nbash"	allow
+"echo 'pkill --full X' ||\nbash"	allow
+"echo 'pkill --full X' &&\nbash"	allow
+"echo 'pkill --full X' |\necho y\nbash"	allow
+"pgrep --full x\n# note\necho $?"	warn
+"pgrep --full x; # note\necho $?"	warn
+"pgrep --full x # note\necho $?"	warn
+"pgrep --full x\n# note $?\necho y"	allow
+"while true; do\npgrep --full x || true\nfor i in 1 2; do break # inner\ndone\nsleep 1\ndone"	warn
+"while true; do\npgrep --full x || true\nfor i in 1 2; do break 2 # outer\ndone\nsleep 1\ndone"	deny:loop
+"while true; do pgrep --full x && break # out\nsleep 1; done"	deny:loop
+"while true; do # see /tmp/claude-1000/proj/sess/tasks/abc.output\nsleep 1; break; done"	allow
+"# /tmp/claude-1000/proj/sess/tasks/abc.output\nwhile true; do sleep 1; break; done"	allow
+"until [ -s /tmp/claude-1000/proj/sess/tasks/abc.output ]; do sleep 1 # wait\ndone"	deny:task-poll
