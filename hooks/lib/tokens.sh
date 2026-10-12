@@ -45,9 +45,8 @@ function tokens::is_prefix_command() {
   return 1
 }
 
-# @description True when an option of a prefix command consumes the NEXT word, so that word is the
-#              option's value rather than the command. `--opt=value` needs no entry: an attached
-#              value is a single word.
+# @description True when a spelling is an option of a prefix command that takes a value: the table
+#              tokens::prefix_value_option reads. It holds each option spelled alone (`-u`, `--user`).
 #
 #              An option missing from this table leaks -- with no operand budget to absorb it, its
 #              value is read as the command word itself, which ends the chain and hides the real
@@ -56,10 +55,10 @@ function tokens::is_prefix_command() {
 #              enough to swallow an unknown option's value would read the `pkill` of
 #              `sudo deploy.sh pkill x` as a command and deny one bash never runs.
 # @arg $1 prefix the prefix command, already reduced to its basename
-# @arg $2 word the option word to test
-# @exitcode 0 the option consumes the next word
+# @arg $2 word the option spelling to test
+# @exitcode 0 the option takes a value
 # @exitcode 1 it does not
-function tokens::prefix_value_option() {
+function tokens::prefix_value_spelling() {
   local -r prefix="$1" word="$2"
   case "${prefix}" in
     'sudo')
@@ -138,6 +137,36 @@ function tokens::prefix_value_option() {
   esac
 }
 
+# @description True when an option word of a prefix command consumes the NEXT word, so that word
+#              is the option's value rather than the command. `--opt=value` is a single word and
+#              consumes nothing.
+#
+#              A word of several short flags (`sudo -nu root`, `xargs -rn 1`) is read as getopt
+#              reads it: the first letter that takes a value ends the flags. When it is the last
+#              letter the value is the next word; otherwise the rest of the word is the value
+#              (`-nuroot`, `-rn1`) and nothing more is consumed. A value-taking letter the table
+#              lacks, in front of one it holds, makes this consume the command word's place; the
+#              word after it is then read as the command, which errs toward a deny.
+# @arg $1 prefix the prefix command, already reduced to its basename
+# @arg $2 word the option word to test
+# @exitcode 0 the option consumes the next word
+# @exitcode 1 it does not
+function tokens::prefix_value_option() {
+  local -r prefix="$1" word="$2"
+  local i
+  tokens::prefix_value_spelling "${prefix}" "${word}" && return 0
+  [[ "${word}" =~ ^-[A-Za-z0-9]{2,}$ ]] || return 1
+  for ((i = 1; i < ${#word}; i++)); do
+    if tokens::prefix_value_spelling "${prefix}" "-${word:i:1}"; then
+      if ((i == ${#word} - 1)); then
+        return 0
+      fi
+      return 1
+    fi
+  done
+  return 1
+}
+
 # @description How many non-flag operands a prefix command takes before the command word.
 #
 #              `timeout` has its duration, `chrt` its priority and `taskset` its CPU mask (or, after
@@ -173,7 +202,7 @@ function tokens::prefix_flag_carries_operand() {
 #
 #              The table is deliberately partial: it holds the spellings a person actually types.
 #              Every omission (`sudo -K`, `env --help`, ...) costs a false deny, never a false
-#              allow, so completeness here buys much less than it does in tokens::prefix_value_option.
+#              allow, so completeness here buys much less than it does in tokens::prefix_value_spelling.
 # @arg $1 prefix the prefix command
 # @arg $2 word the option word to test
 # @exitcode 0 the option ends the chain
