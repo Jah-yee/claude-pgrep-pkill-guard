@@ -299,8 +299,8 @@ function wrappers::group_stdin_kind() {
   local -a closers=("${first_closer}")
   local offset token closer inner_at_cmd=1 closed=0 expect_target=0 expect_delim=0 glue_at=-1 kind=''
   local seq="${base_seq}" ordinal='' piped=0 moved=0 here_text='' here_set=0 redirect_text=''
-  local -r redir_re='^[0-9]*[<>]+$' heredoc_re='^([0-9]*)<<([^<]|$)' bare_heredoc_re='^[0-9]*<<-?$'
-  local -r single_re='^[0-9]*[<>]$' stdin_redir_re='^(0?<|0>)' stdout_redir_re='^(1?>|1<>)'
+  local -r redir_re='^([0-9]*[<>]+|&>>?)$' heredoc_re='^([0-9]*)<<([^<]|$)' bare_heredoc_re='^[0-9]*<<-?$'
+  local -r single_re='^[0-9]*[<>]$' stdin_redir_re='^(0?<|0>)' stdout_redir_re='^(&>|1?>|1<>)'
   while IFS=$'\t' read -r offset token; do
     [[ -z "${token}" ]] && continue
     if ((closed == 0)); then
@@ -344,10 +344,6 @@ function wrappers::group_stdin_kind() {
         expect_target=1
         glue_at=-1
       fi
-      continue
-    fi
-    if [[ "${token}" == '&' && "${command:offset+1:1}" == '>' ]]; then
-      moved=1
       continue
     fi
     # `<<-` is no `redir_re` match (the dash), but it is a redirection.
@@ -618,7 +614,7 @@ function wrappers::watch_payload() {
 #              Any other redirection in the same simple command (`bash <<EOF >
 #              /tmp/log`, `bash <<EOF 2>&1`) is neither an operand nor a flag: it leaves both the
 #              budget and the wrapper's own pending heredoc alone. The `&` of a duplication
-#              (`2>&1`, `<&3`, `>&file`) or of `&>`, and the `|` of `>|`, are part of the
+#              (`2>&1`, `<&3`, `>&file`) and the `|` of `>|` are part of the
 #              redirection operator and do not end the simple command, so `bash 2>&1 <<EOF` and
 #              `bash >| /tmp/log -c '...'` still own what follows. A background `&` does end it
 #              (`bash <<EOF &`).
@@ -799,20 +795,20 @@ function wrappers::shell_wrapper_payloads() {
   # evaluated unquoted in [[ =~ ]].
   local -r heredoc_re='^([0-9]*)<<([^<]|$)' bare_heredoc_re='^[0-9]*<<-?$'
   # Any other redirection: an optional fd, then a run of `<` and `>` (`>`, `>>`,
-  # `<>`). The scanner emits the operator on its own, so the next token is the
-  # target and is not an operand either. A `<<` heredoc operator also matches
+  # `<>`), or `&>` and `&>>`. The scanner emits the operator on its own, so the
+  # next token is the target and is not an operand either. A `<<` heredoc operator also matches
   # and must stay ABOVE it: that branch `continue`s, so it never reaches here.
   # `stdin_redir_re` picks out the ones that redirect fd 0: an input operator
   # with no fd, or any operator with an explicit `0`.
-  local -r redir_re='^[0-9]*[<>]+$'
+  local -r redir_re='^([0-9]*[<>]+|&>>?)$'
   local -r stdin_redir_re='^(0?<|0>)'
   # `redir_single_re` picks out the bare `<` and `>` operators, which an `&` or
   # a `|` extends to `<&`, `>&` or `>|`; `glue_at` is the offset just past one,
   # where that `&` or `|` has to sit.
   local -r redir_single_re='^[0-9]*[<>]$'
   # `stdout_redir_re` picks out the ones that redirect fd 1: an output operator
-  # with no fd or with an explicit `1`, or `1<>`.
-  local -r stdout_redir_re='^(1?>|1<>)'
+  # with no fd or with an explicit `1`, `1<>`, or `&>` and `&>>`.
+  local -r stdout_redir_re='^(&>|1?>|1<>)'
   local glue_at=-1
   # The rest of this loop stays inline on purpose: the blocks share most of
   # the locals above, and a helper with that many namerefs is harder to read
@@ -902,12 +898,6 @@ function wrappers::shell_wrapper_payloads() {
       # Any other operator here is no target. It ends the simple command and
       # must reach the flush below like any other.
       tokens::is_operator "${token}" || continue
-    fi
-    # `&>` and `&>>` arrive as an `&` and then the `>` token, which the branch
-    # below reads as the redirection it is. A background `&` is never glued to
-    # a `>`.
-    if [[ "${token}" == '&' && "${command:offset+1:1}" == '>' ]]; then
-      continue
     fi
     if [[ "${token}" =~ ${redir_re} ]]; then
       expect_redir_target=1

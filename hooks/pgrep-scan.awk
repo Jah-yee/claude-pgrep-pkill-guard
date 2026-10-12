@@ -21,7 +21,10 @@
 # braces of an unquoted `${...}` excepted, which stay in their word), and
 # at a redirection operator: a run of `<` and `>` is a token of its own, with the
 # digits of a file descriptor before it (`2>`, `10<`), and its target is the next
-# token (`>f` is `>`, `f`). A `<` or `>` inside arithmetic is a comparison and
+# token (`>f` is `>`, `f`). An `&` that touches a `>` behind it is the `&>` or
+# `&>>` operator and one token with it, unless it is the second `&` of `&&`,
+# the `&` of `|&` or the `&` of `>&`; an `&` with space before the `>` puts a
+# command in the background. A `<` or `>` inside arithmetic is a comparison and
 # is masked, so it does not split.
 #
 # Input handling deliberately depends on nothing about RS. The command is read
@@ -317,6 +320,15 @@ BEGIN {
       if (ch == "\n") print (i - 1) "\t<NL>\n"
     } else if (index(";&|(){}`", ch) > 0) {
       if (word != "") { print (start - 1) "\t" word "\n"; word = "" }
+      # `&>` and `&>>` redirect, and only the bytes can tell them from a
+      # backgrounding `&` in front of a redirection (`a & >f b`).
+      if (ch == "&" && i != op_end && substr(masked, i + 1, 1) == ">" \
+          && (i == 1 || index("&|", substr(masked, i - 1, 1)) == 0)) {
+        start = i; word = "&>"; i++
+        if (substr(masked, i + 1, 1) == ">") { i++; word = word ">" }
+        print (start - 1) "\t" word "\n"; word = ""
+        continue
+      }
       print (i - 1) "\t" ch "\n"
       # The `&` of `>&` and `<&` is followed by the duplication's target, whose
       # digits are not a file descriptor even when an operator follows them

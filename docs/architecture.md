@@ -241,6 +241,8 @@ makes `until [ -z "$(pgrep --full x)" ]` visible. It then emits one
 A redirection operator ends the word before it and is a token of its own, with
 the digits of its file descriptor (`2>`, `<<-`), and its target is the next
 token, so `bash<<'EOF'` and `cmd 'x'>f` read as the spaced spellings do.
+`&>` and `&>>` are one token as well, which is what tells them from a
+backgrounding `&` in front of a redirection (`a & >f b`).
 The walks that track command position in the token stream skip a redirection
 (the operator, the `&` or `|` that extends `>&` or `>|`, and the target) without
 leaving command position, so `2> /dev/null pkill --full X` and
