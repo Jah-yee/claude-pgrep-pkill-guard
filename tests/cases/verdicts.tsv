@@ -1475,7 +1475,7 @@
 "pgrep --full X | xargs -eE kill"	deny:kill
 "pgrep --full X | xargs -rl1 kill"	deny:kill
 "pgrep --full X | xargs -ri kill {}"	deny:kill
-"pgrep --full X | xargs -rin 1 kill"	warn
+"pgrep --full X | xargs -tin 1 kill"	warn
 "watch -tn 1 'pkill --full X'"	deny:kill
 "watch -dn 1 sudo -nu root 'pkill --full X'"	deny:kill
 "sudo -nu root bash <<'EOF'\npkill --full X\nEOF"	deny:kill
