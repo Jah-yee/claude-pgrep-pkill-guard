@@ -50,11 +50,13 @@ function repeat::repeat_check() {
   # BSD coreutils, whose mkdir has no long options at all (no `parents`, no
   # `mode=`). hooks/ takes a long option only where the BSD tool has one, and
   # mkdir has none -- the guard has to run on whatever userland ships.
+  # `--` because a relative state dir may start with `-`: every call in this
+  # function that takes `dir` or `file` as an operand carries it.
   # shellcheck disable=SC2174 # -m only binds the deepest dir; an
   # intermediate missing here is a hand-set XDG_RUNTIME_DIR or TMPDIR, an
   # ancestor of one, or an ancestor of a hand-set PGREP_PKILL_GUARD_STATE_DIR,
   # which the caller owns the mode of.
-  if ! mkdir -p -m 0700 "${dir}" 2> /dev/null; then
+  if ! mkdir -p -m 0700 -- "${dir}" 2> /dev/null; then
     return 0
   fi
   # `mkdir -p` on a dir that already exists changes neither its owner nor its
@@ -94,7 +96,7 @@ function repeat::repeat_check() {
     # before that process's own open() attempt, so a TOCTOU race (the file
     # removed between the -r check above and this read) is fully silenced,
     # not just made non-fatal.
-    if ! content="$(cat "${file}" 2> /dev/null)"; then
+    if ! content="$(cat -- "${file}" 2> /dev/null)"; then
       return 0
     fi
     # `<<<` appends exactly one newline regardless of whether the file (and
@@ -155,7 +157,7 @@ function repeat::repeat_check() {
   # mktemp both picks an unpredictable name and creates the file itself
   # (it will not follow an existing symlink at that name), so there is
   # nothing left for a planted symlink to redirect.
-  tmp="$(mktemp "${file}.XXXXXX" 2> /dev/null)" || return 0
+  tmp="$(mktemp -- "${file}.XXXXXX" 2> /dev/null)" || return 0
   # `2> /dev/null` sits before `>` so a failed open reports nothing: with the
   # reverse order bash still applies `>` first, so the open failure prints
   # to the ORIGINAL stderr before the stderr redirect ever takes effect.

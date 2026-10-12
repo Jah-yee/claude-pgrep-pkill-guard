@@ -222,3 +222,17 @@ function setup() {
   run wc -l < "${STATE_DIR}/s16"
   assert_output --regexp '^[[:space:]]*6000$'
 }
+
+@test "repeat: a relative state dir that starts with a dash still counts probes" {
+  local i json
+  # Relative to the hook's working directory, so the name reaches mkdir, cat,
+  # mktemp and mv with a leading dash.
+  cd "${BATS_TEST_TMPDIR}"
+  export PGREP_PKILL_GUARD_STATE_DIR='-state'
+  for i in 1 2 3; do
+    json="$(run_hook "cat ${TASK_PATH}" 's18')"
+  done
+  [[ "$(decision_of "${json}")" == 'deny' ]]
+  run wc -l < "${BATS_TEST_TMPDIR}/-state/s18"
+  assert_output --regexp '^[[:space:]]*2$'
+}
