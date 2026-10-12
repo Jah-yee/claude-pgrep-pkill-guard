@@ -111,6 +111,12 @@ function scanner::find_invocations() {
         glued_open=1
       fi
     fi
+    # A process substitution right behind a redirection operator is that redirection's target
+    # (`> >(cat) pkill`), not a word: its own `<` or `>` was read as the target and left no
+    # redirection pending, where the `>` of a word on its own (`tee >(cat)`) still has one.
+    if [[ "${kind}" == 'S' && -z "${redir}" ]]; then
+      glued_open=1
+    fi
     case "${kind}" in
       'P' | 'A') saved+=("1:${at_cmd}:${chain}:${chain_skip}:${chain_operands}") ;;
       'S' | 'B') saved+=("${glued_open}:${at_cmd}:${chain}:${chain_skip}:${chain_operands}") ;;

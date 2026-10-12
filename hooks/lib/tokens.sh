@@ -26,10 +26,18 @@ readonly -a COMMAND_POSITION_KEYWORDS=(
 # behind `flock` or `strace`. `watch` also hands its operands to `sh -c`
 # (`watch 'pkill --full X'`); the chain cannot see into a quoted one, so
 # wrappers::shell_wrapper_payloads reads it as a payload.
+#
+# `coproc` is bash's reserved word and not a program, so it is a prefix only as the first word
+# of a command, where tokens::prefix_chain_step admits it: `sudo coproc x` runs a program of
+# that name. `coproc NAME { ...; }` needs nothing more, since NAME ends the chain and the `{`
+# restores command position.
 readonly -a PREFIX_COMMANDS=(
   'sudo' 'doas' 'env' 'nohup' 'command' 'time' 'timeout' 'nice' 'ionice' 'stdbuf' 'setsid'
-  'chrt' 'taskset' 'unbuffer' 'watch' 'xargs' 'exec'
+  'chrt' 'taskset' 'unbuffer' 'watch' 'xargs' 'exec' 'coproc'
 )
+
+# What classify::classify_command puts in the token array in place of a comment.
+readonly COMMENT_TOKEN='<#>'
 
 # @description True when a token is a command prefix that keeps the following word in command
 #              position.
@@ -314,7 +322,8 @@ function tokens::prefix_chain_step() {
   # `git command x` the word `command` is an argument, not a prefix. The prefix
   # test runs before the keyword test because `time` is both, and only the
   # prefix reading understands its `-o file`.
-  if ((at_cmd == 1)) && tokens::is_prefix_command "${word}"; then
+  if ((at_cmd == 1)) && tokens::is_prefix_command "${word}" \
+    && [[ "${word}" != 'coproc' || ("${token}" == 'coproc' && "${chain_ref}" =~ ^(pipe)?$) ]]; then
     # `time` is bash's reserved word only as the very first word of a command:
     # `time -o f cmd` runs `-o`, not GNU time. Behind a prefix (`env time`,
     # `sudo -u bob time`) or an assignment (`FOO=1 time`) the word is one those

@@ -51,7 +51,8 @@ function consumption::is_xargs_value_option() {
 #              `pgrep --full x | grep -i kill` merely searches for the word and
 #              `| xargs sudo -u kill echo` names a user. A `$(...)`, `$((...))`, backtick or
 #              process-substitution region is stepped over whole, as the one word it is
-#              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. The one
+#              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. One
+#              that is a redirection's target (`2> >(cat)`) is no word at all. The one
 #              region that is read is a `>(...)`: the command inside it reads what the stage writes
 #              to it (`| tee >(wc -l)`, `| tee >(xargs kill)`), so the word looked for anywhere in it
 #              counts. Asked about `kill`, a stage headed by `while`/`until`
@@ -61,7 +62,7 @@ function consumption::is_xargs_value_option() {
 #
 #              The scan follows the invocation's own pipeline and no further: `|` and `|&`
 #              carry it into the next stage, and `;` and a newline that does not follow a pipe end
-#              it. Asked about `count`, a `&&` or `||` is the answer. Asked about `kill`, `||`, `&&`
+#              it. Comments and blank lines behind a trailing pipe do not. Asked about `count`, a `&&` or `||` is the answer. Asked about `kill`, `||`, `&&`
 #              and a lone `&` end the scan, because what stands behind them reads
 #              nothing the invocation wrote (`pgrep --full x || kill 1`,
 #              `pgrep --full x & echo y | xargs kill`) -- unless a group or subshell holds them.
@@ -88,7 +89,7 @@ function consumption::pipeline_feeds() {
   local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4" seek="$5"
   # shellcheck disable=SC2034 # redir and the chain state are written through namerefs, which shellcheck cannot follow
   local idx segment='none' token word prev='none' redir='' chain='' chain_skip=0 chain_operands=0 at_cmd=0
-  local close opener operator span depth=0 nest ahead closer detached=0 inside
+  local close opener operator span depth=0 nest ahead closer detached=0 inside target_region
   local -a closers=()
   for close in "${!openers[@]}"; do
     closers["${openers[close]}"]="${close}"
@@ -101,6 +102,13 @@ function consumption::pipeline_feeds() {
       # pair or process substitution is a word of its own.
       opener="${idx}"
       idx="${closers[idx]}"
+      # A region right behind a redirection operator is that redirection's target
+      # (`2> >(cat)`), not a word, and the `|` after it is a pipe and not the tail of `>|`.
+      target_region=0
+      if [[ -n "${redir}" ]]; then
+        target_region=1
+        redir=''
+      fi
       if [[ "${token}" == '>' ]]; then
         for ((inside = opener; inside < idx; inside++)); do
           case "${seek}:${toks[inside]##*/}" in
@@ -118,7 +126,7 @@ function consumption::pipeline_feeds() {
       if [[ "${toks[idx + 1]:-}" == $'\001' ]]; then
         idx="$((idx + 1))"
       fi
-      if [[ "${token}" == '(' ]] \
+      if ((target_region == 1)) || [[ "${token}" == '(' ]] \
         || tokens::region_holds_assignment "${tokens_var}" "${openers_var}" "${opener}"; then
         continue
       fi
@@ -197,6 +205,8 @@ function consumption::pipeline_feeds() {
         [[ "${prev}" == '|' ]] || break
         continue
         ;;
+      # A comment is no word: after a trailing `|` the pipeline goes on behind it.
+      "${COMMENT_TOKEN}") continue ;;
     esac
     prev="${word}"
     # The braces of an `xargs -I{}` placeholder are tokens of their own. Among xargs's own words
