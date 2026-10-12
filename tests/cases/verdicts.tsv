@@ -1488,3 +1488,38 @@
 "exec -cla name pkill --full X"	deny:kill
 "env time -vo /tmp/t pkill --full X"	deny:kill
 "sudo -l -U bob pkill --full X"	allow
+"pkill --full java &> /dev/null"	deny:kill
+"pkill > /dev/null --full java"	deny:kill
+"pkill &> /dev/null --full java"	deny:kill
+"pkill &>/dev/null --full java"	deny:kill
+"pkill &>> log --full java"	deny:kill
+"pkill &>>log --full java"	deny:kill
+"sudo &> /dev/null pkill --full java"	deny:kill
+"sudo -u root &> /dev/null pkill --full java"	deny:kill
+"&>> /tmp/o pkill --full X"	deny:kill
+"bash -c 'pkill &> /dev/null --full java'"	deny:kill
+"echo 'pkill &> /dev/null --full X' | bash"	deny:kill
+"pgrep &> /dev/null --full x | xargs kill"	deny:kill
+"pgrep --full x | &> /dev/null xargs kill"	deny:kill
+"pgrep --full x | xargs &>> log kill"	deny:kill
+"kill $(pgrep &> /dev/null --full x)"	deny:kill
+"kill 1 &> /dev/null $(pgrep --full x)"	deny:kill
+"kill &> /dev/null $(pgrep --full x)"	deny:kill
+"until ! pgrep &> /dev/null --full x; do sleep 1; done"	deny:loop
+"while true; do pgrep &> /dev/null --full x && break; sleep 1; done"	deny:loop
+"while pgrep &> /dev/null --full x; do sleep 1; done"	deny:loop
+"pgrep &> /dev/null --full x | wc -l"	warn
+"pgrep &> /dev/null --full x && echo y"	warn
+"pgrep &> /dev/null --full x"	allow
+"pkill &> /dev/null java"	allow
+"echo hi &> /dev/null pkill --full java"	allow
+"echo hi &>> log pkill --full java"	allow
+"echo hi &>f; pkill --full java"	deny:kill
+"echo hi & > /dev/null pkill --full java"	deny:kill
+"echo hi & >f pkill --full java"	deny:kill
+"echo hi & pkill --full java"	deny:kill
+"echo hi && > /dev/null pkill --full java"	deny:kill
+"echo hi &\n> /dev/null pkill --full java"	deny:kill
+"pgrep --full x & > /dev/null echo y | xargs kill"	allow
+"pkill >& f --full java"	deny:kill
+"pkill 2>&1 --full java"	deny:kill
