@@ -7,7 +7,9 @@
 # end of line. Masking it matters in both directions: a single apostrophe in
 # prose ("it's", "don't") otherwise inverts quote parity for the whole rest of
 # the command, which has been observed both exposing a quoted string as if it
-# were code and hiding a real poll loop inside a quoted region.
+# were code and hiding a real poll loop inside a quoted region. It is masked to
+# blanks, not to filler: a comment is no word of any command, so it emits no
+# token at all, and no reader of the stream has to tell it from a quoted word.
 #
 # A heredoc body is text the shell feeds to a command, not code. Its
 # bytes are masked from the newline after the `<<` line to the terminator
@@ -153,7 +155,7 @@ BEGIN {
       if (ch == "#" && !(depth > 0 && opener[depth] == "V") \
           && (i == 1 || prev == " " || prev == "\t" || prev == "\n" \
           || prev == ";" || prev == "&" || prev == "|")) {
-        while (i <= n && substr(cmd, i, 1) != "\n") { masked = masked "\001"; i++ }
+        while (i <= n && substr(cmd, i, 1) != "\n") { masked = masked " "; i++ }
         continue
       }
       if (ch == "$" && substr(cmd, i + 1, 1) == "(") {
