@@ -1469,3 +1469,22 @@
 "env -iu pkill --full X"	allow
 "pgrep --full X | xargs -rn kill"	warn
 "pgrep --full X | xargs -rn 1 echo kill"	warn
+"pgrep --full X | xargs -in kill"	deny:kill
+"pgrep --full X | xargs -iI kill I"	deny:kill
+"pgrep --full X | xargs -ia kill a"	deny:kill
+"pgrep --full X | xargs -eE kill"	deny:kill
+"pgrep --full X | xargs -rl1 kill"	deny:kill
+"pgrep --full X | xargs -ri kill {}"	deny:kill
+"pgrep --full X | xargs -rin 1 kill"	warn
+"watch -tn 1 'pkill --full X'"	deny:kill
+"watch -dn 1 sudo -nu root 'pkill --full X'"	deny:kill
+"sudo -nu root bash <<'EOF'\npkill --full X\nEOF"	deny:kill
+"echo 'pkill --full X' | sudo -Eu root sh"	deny:kill
+"pgrep --full X | while read -r p; do sudo -nu root kill \"$p\"; done"	deny:kill
+"until sudo -nu root pgrep --full x; do sleep 1; done"	deny:loop
+"pgrep --full X | sudo -nu root wc -l"	warn
+"sudo -nu \"$USER\" pkill --full X"	deny:kill
+"sudo -nu root -- pkill --full X"	deny:kill
+"exec -cla name pkill --full X"	deny:kill
+"env time -vo /tmp/t pkill --full X"	deny:kill
+"sudo -l -U bob pkill --full X"	allow
