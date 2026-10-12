@@ -386,6 +386,21 @@ function words() {
   assert_output 'bash 2> & 1 << EOF'
 }
 
+@test "scanner: &> and &>> are one redirection token" {
+  run words 'a &>f b &>> g'
+  assert_output 'a &> f b &>> g'
+}
+
+@test "scanner: an & that does not touch the > is an operator" {
+  run words 'a & >f b'
+  assert_output 'a & > f b'
+}
+
+@test "scanner: the & of &&, |& and >& is not the start of &>" {
+  run words 'a &&>f b |&>g c >&h'
+  assert_output 'a & & > f b | & > g c > & h'
+}
+
 @test "scanner: an arrow inside a word splits as bash reads it" {
   run words 'echo a->b'
   assert_output 'echo a- > b'
