@@ -1538,3 +1538,41 @@
 "if &>/dev/null pgrep --full x; then echo up; fi"	warn
 "echo hi&>f pkill --full X"	allow
 "kill $(echo 1 &>f pgrep --full x)"	allow
+"coproc pkill --full java"	deny:kill
+"coproc pkill --full java; echo y"	deny:kill
+"coproc sudo pkill --full java"	deny:kill
+"coproc sudo -nu root pkill --full java"	deny:kill
+"coproc bash -c 'pkill --full java'"	deny:kill
+"coproc pgrep --full x | xargs kill"	deny:kill
+"coproc P { pkill --full java; }"	deny:kill
+"coproc { pkill --full java; }"	deny:kill
+"coproc P (pkill --full java)"	deny:kill
+"coproc while true; do pgrep --full x && break; sleep 1; done"	deny:loop
+"echo y; coproc pkill --full java"	deny:kill
+"coproc pkill java"	allow
+"echo coproc pkill --full java"	allow
+"sudo coproc pkill --full java"	allow
+"coproc deploy.sh pkill --full java"	allow
+"pgrep --full x 2> >(cat) | xargs kill"	deny:kill
+"pgrep --full x > >(cat) | xargs kill"	deny:kill
+"> >(cat) pkill --full X"	deny:kill
+"&> >(cat) pkill --full X"	deny:kill
+"2> >(cat) sudo pkill --full X"	deny:kill
+"kill $(> >(cat) pgrep --full x)"	deny:kill
+"echo hi > >(cat) pkill --full X"	allow
+"pgrep --full x 2> >(cat) 2>&1 | xargs kill"	deny:kill
+"pgrep --full x < <(cat) | xargs kill"	deny:kill
+"pgrep --full x 2> >(cat) | wc -l"	warn
+"pgrep --full x 2> >(cat) && echo y"	warn
+"pgrep --full x 2> >(cat) | sort"	allow
+"pgrep --full x | sort 2> >(cat) | xargs kill"	deny:kill
+"pgrep --full x | cat |\n# note\nxargs kill"	deny:kill
+"pgrep --full x |\n# note\nxargs kill"	deny:kill
+"pgrep --full x |\n\n# note\n\nxargs kill"	deny:kill
+"pgrep --full x | # note\nxargs kill"	deny:kill
+"pgrep --full x |\n  # note one\n  # note two\n  xargs kill"	deny:kill
+"pgrep --full x |\n# note\nwc -l"	warn
+"pgrep --full x | sort |\n# note\nhead"	allow
+"pgrep --full x | cat\n# note\nxargs kill"	allow
+"pgrep --full x | cat # note\necho y | xargs kill"	allow
+"pgrep --full x # note\necho y | xargs kill"	allow
