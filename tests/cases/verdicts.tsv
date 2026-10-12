@@ -1213,3 +1213,19 @@
 "pgrep --full X | sudo -u root grep kill"	allow
 "pgrep --full X | command -v kill"	allow
 "pgrep --full X | while read -r p; do echo kill $p; done"	allow
+"pgrep --full X | sudo -u $(whoami) xargs kill"	deny:kill
+"pgrep --full X | xargs -P $(nproc) kill"	deny:kill
+"pgrep --full X | xargs -P \"$(nproc)\" kill"	deny:kill
+"pgrep --full X | xargs -n $((1)) kill"	deny:kill
+"pgrep --full X | timeout $(echo 5) xargs kill"	deny:kill
+"pgrep --full X | FOO=$(true) xargs kill"	deny:kill
+"pgrep --full X | FOO=`true` xargs kill"	deny:kill
+"pgrep --full X | xargs sudo -u $(whoami) kill"	deny:kill
+"pgrep --full X | xargs -a <(echo PAYLOAD_RAN) kill"	deny:kill
+"pgrep --full X | xargs -P `nproc` kill"	deny:kill
+"pgrep --full X | xargs $(echo a) kill"	warn
+"pgrep --full X | xargs `echo a` kill"	warn
+"pgrep --full X | xargs <(echo a) kill"	warn
+"pgrep --full X | nice {} kill"	allow
+"pgrep --full X | sudo {} kill"	allow
+"pgrep --full X | timeout 5 {} kill"	allow
