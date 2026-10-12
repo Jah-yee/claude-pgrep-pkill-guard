@@ -1,10 +1,10 @@
 # .ci/run-lint-checks' own control flow, against a throwaway repo and stub
-# linters: what the gate does with the file lists it builds, not what any
-# linter says about a file.
+# linters: what the gate does with the file lists it builds and the
+# directories it looks for, not what any linter says about a file.
 #
 # `run --separate-stderr` is a bats 1.5.0 flag: the reason for an empty file
-# list belongs on stderr, and a merged capture cannot tell it apart from a
-# stray stdout write.
+# list or a missing directory belongs on stderr, and a merged capture cannot
+# tell it apart from a stray stdout write.
 #
 # setup sets CHECK, the gate under test, FIXTURE, the throwaway repo the gate
 # runs in, and STUB_DIR, the directory holding the stub linters.
@@ -24,9 +24,9 @@ function setup() {
 #              The repo tracks one file of every kind the gate lists except
 #              Markdown, which each case adds or withholds: a bash script, an
 #              awk program, a Nix file, and the .github directory with its
-#              Renovate config. It also holds a stub `.ci/check-bash-style`,
-#              because the gate calls that one by its path under the repo root
-#              rather than through PATH.
+#              Renovate config and a workflow. It also holds a stub
+#              `.ci/check-bash-style`, because the gate calls that one by its
+#              path under the repo root rather than through PATH.
 #
 #              Every linter is a stub that exits 0, so a case's verdict comes
 #              from the gate's handling of its lists alone, and the suite needs
@@ -49,7 +49,7 @@ function make_lint_fixture() {
     'renovate-config-validator' 'markdownlint-cli2' 'typos' 'editorconfig-checker'
   )
   local linter
-  mkdir -p "${FIXTURE}/.ci" "${FIXTURE}/.github" "${STUB_DIR}"
+  mkdir -p "${FIXTURE}/.ci" "${FIXTURE}/.github/workflows" "${STUB_DIR}"
   for linter in "${linters[@]}"; do
     printf '#!/bin/sh\nexit 0\n' > "${STUB_DIR}/${linter}"
     chmod +x "${STUB_DIR}/${linter}"
@@ -59,6 +59,7 @@ function make_lint_fixture() {
   printf 'BEGIN { exit 0 }\n' > "${FIXTURE}/scan.awk"
   printf '{ }\n' > "${FIXTURE}/flake.nix"
   printf '{}\n' > "${FIXTURE}/.github/renovate.json"
+  printf 'on: push\n' > "${FIXTURE}/.github/workflows/ci.yml"
   git -C "${FIXTURE}" init --quiet
   git -C "${FIXTURE}" add --all
 }
@@ -72,8 +73,8 @@ function gate_in_fixture() {
   (cd "${FIXTURE}" && PATH="${STUB_DIR}:${PATH}" "${CHECK}")
 }
 
-# Every case needs nothing but bash, git and POSIX `mkdir -p`, `cp` and
-# `chmod` -- deliberately no coreutils long options and no Nix -- so the ambient
+# Every case needs nothing but bash, git and POSIX `mkdir -p`, `cp`, `mv -f`
+# and `chmod` -- deliberately no coreutils long options and no Nix -- so the ambient
 # `compat (macos, homebrew bash)` leg runs this suite for real rather than
 # skipping it. Hence no devShell skip here, the same as
 # tests/bats-no-shebang.bats.
@@ -98,4 +99,29 @@ function gate_in_fixture() {
   assert_failure 1
   assert_output ''
   [[ "${stderr}" == *'[run-lint-checks] no markdown files found - this is a failure, not a clean pass'* ]]
+}
+
+@test "lint checks: a missing .github/workflows directory is a failure, not a clean pass" {
+  # actionlint finds the workflows by itself, so the gate runs it only when the
+  # directory is there; without it the step has linted nothing.
+  printf '# Title\n' > "${FIXTURE}/README.md"
+  git -C "${FIXTURE}" add -- 'README.md'
+  mv -f -- "${FIXTURE}/.github/workflows" "${BATS_TEST_TMPDIR}/workflows"
+  run --separate-stderr gate_in_fixture
+  assert_failure 1
+  assert_output ''
+  [[ "${stderr}" == *'[run-lint-checks] no .github/workflows directory found - this is a failure, not a clean pass'* ]]
+}
+
+@test "lint checks: a missing .github directory is a failure, not a clean pass" {
+  # zizmor is pointed at .github, so without the directory it has audited
+  # nothing; the workflows went with it, so the actionlint step says so too.
+  printf '# Title\n' > "${FIXTURE}/README.md"
+  git -C "${FIXTURE}" add -- 'README.md'
+  mv -f -- "${FIXTURE}/.github" "${BATS_TEST_TMPDIR}/github"
+  run --separate-stderr gate_in_fixture
+  assert_failure 1
+  assert_output ''
+  [[ "${stderr}" == *'[run-lint-checks] no .github directory found - this is a failure, not a clean pass'* ]]
+  [[ "${stderr}" == *'[run-lint-checks] no .github/workflows directory found - this is a failure, not a clean pass'* ]]
 }
