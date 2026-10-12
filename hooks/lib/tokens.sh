@@ -391,14 +391,16 @@ function tokens::is_operator() {
 #              token of its own, so `||` is a pair of `|` tokens, `&&` a pair of `&` tokens and `|&`
 #              a `|` and an `&`. bash accepts none of those pairs with anything between the tokens,
 #              so their being neighbours in the array tells them from a lone `|` or `&`. An `&`
-#              directly before a run of `>` is the `&>` or `&>>` redirection operator. The `&` of
-#              `2>&1` and `>&` never gets here in a walk that calls tokens::redirection_step first.
+#              directly before a run of `>` is read as the `&>` or `&>>` redirection operator; the
+#              array has no offsets, so a backgrounding `&` with a space before a `>` (`a & >f b`)
+#              reads the same. The `&` of `2>&1` and `>&` never gets here in a walk that calls
+#              tokens::redirection_step first.
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 index index of the token to name
 # @arg $3 kind name of the caller's variable that receives the result: `pipe` for `|` and `|&`,
 #         `or`, `and`, `background` for a lone `&`, `redirection` for the `&` of `&>`, and empty
 #         when the token is neither a `|` nor an `&`. Never pass a variable called toks, index,
-#         kind_ref or span_ref.
+#         following, kind_ref or span_ref.
 # @arg $4 span name of the caller's variable that receives the number of tokens the operator
 #         takes; for `redirection` that is the `&` alone, and tokens::redirection_step reads the
 #         rest
