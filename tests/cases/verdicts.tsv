@@ -1368,3 +1368,18 @@
 "(pgrep --full x & wait) | wc -l"	warn
 "pgrep --full x | (sort && echo ok)"	warn
 "n=$(pgrep --full x | sort | head)"	warn
+"pgrep --full x | tee >(wc -l)"	warn
+"pgrep --full x | sort | head | tee >(xargs echo)"	warn
+"pgrep --full x | tee >(cat)"	allow
+"pgrep --full x | tee >(xargs kill)"	deny:kill
+"pgrep --full x | sort | head; echo ${PIPESTATUS[0]}"	warn
+"pgrep --full x | sort; echo ${PIPESTATUS[0]}"	warn
+"(pgrep --full x &) && echo z"	allow
+"{ pgrep --full x & } && echo z"	allow
+"(pgrep --full x | sort & echo y) && echo z"	allow
+"pgrep --full x |\n\nwc -l"	warn
+"while true; do pgrep --full x | sort | head; sleep 1; done"	allow
+"while true; do pgrep --full x | grep -q y || break; sleep 1; done"	deny:loop
+"while true; do pgrep --full x | sort | head; echo ${PIPESTATUS[0]}; break; done"	deny:loop
+"while true; do pgrep --full x | sort | tee >(wc -l); [ -f s ] && break; done"	deny:loop
+"while true; do pgrep --full x | grep -v grep | grep y; [ -f stop ] && break; sleep 1; done"	allow
