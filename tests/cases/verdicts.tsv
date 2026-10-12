@@ -1630,3 +1630,19 @@
 "while true; do # see /tmp/claude-1000/proj/sess/tasks/abc.output\nsleep 1; break; done"	allow
 "# /tmp/claude-1000/proj/sess/tasks/abc.output\nwhile true; do sleep 1; break; done"	allow
 "until [ -s /tmp/claude-1000/proj/sess/tasks/abc.output ]; do sleep 1 # wait\ndone"	deny:task-poll
+"echo 'pkill --full X' | { cat |\nbash; }"	deny:kill
+"echo 'pkill --full X' | ( cat |\nbash )"	deny:kill
+"{ cat |\nbash; } <<EOF\npkill --full X\nEOF"	deny:kill
+"echo 'pkill --full X' | { tee f |\nbash; }"	deny:kill
+"echo 'pkill --full X' | { cat |\ncat; } | bash"	deny:kill
+"while read -r l; do cat |\nbash; done <<EOF\npkill --full X\nEOF"	deny:kill
+"echo 'pkill --full X' | { true |\nbash; }"	deny:kill
+"echo 'pkill --full X' | { true |\n{ bash; }; }"	deny:kill
+"echo 'pkill --full X' | { echo hi | bash; }"	allow
+"echo 'pkill --full X' | { echo hi |\nbash; }"	allow
+"echo 'pkill --full X' | { cat > /dev/null | bash; }"	allow
+"cat <<EOF |\n$(echo a)\npkill --full X\nEOF\nbash"	deny:kill
+"cat <<EOF |\npkill --full X $(echo a)\nEOF\nbash"	deny:kill
+"cat <<EOF |\npkill --full X $((1+1))\nEOF\nbash"	deny:kill
+"pkill --full '[f]oo' # c"	allow
+"pkill --full foo # '[f]oo'"	deny:kill
