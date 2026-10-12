@@ -1261,3 +1261,14 @@
 "for p in $(echo a; pgrep --full X); do echo $p; done"	warn
 "kill $(echo a) ; pgrep --full X"	allow
 "kill <(echo a; pgrep --full X)"	allow
+"kill $(echo a; echo $(echo b; pgrep --full X))"	deny:kill
+"kill \"$(echo a; pgrep --full X)\""	deny:kill
+"kill $(echo a\npgrep --full X)"	deny:kill
+"kill ${x:-$(echo a; pgrep --full X)}"	deny:kill
+"kill $(for i in $(pgrep --full X); do echo $i; done)"	deny:kill
+"kill $(for p in $(echo a; pgrep --full X); do echo $p; done)"	deny:kill
+"echo $(for i in $(pgrep --full X); do echo $i; done)"	warn
+"kill $(echo 1; x=$(pgrep --full X))"	warn
+"kill $(echo a; x=$(echo b; pgrep --full X); echo 1)"	warn
+"kill $(cat pidfile; export n=$(pgrep --full X))"	warn
+"kill $(echo 1; x=`pgrep --full X`)"	warn
