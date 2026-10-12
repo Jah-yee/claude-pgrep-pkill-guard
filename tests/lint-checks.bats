@@ -24,7 +24,7 @@ function setup() {
 #              The repo tracks one file of every kind the gate lists except
 #              Markdown, which each case adds or withholds: a bash script, an
 #              awk program, a Nix file, and the .github directory with its
-#              Renovate config. It also holds a stub `.ci/check-bash-style`,
+#              Renovate config and a workflow. It also holds a stub `.ci/check-bash-style`,
 #              because the gate calls that one by its path under the repo root
 #              rather than through PATH.
 #
@@ -49,7 +49,7 @@ function make_lint_fixture() {
     'renovate-config-validator' 'markdownlint-cli2' 'typos' 'editorconfig-checker'
   )
   local linter
-  mkdir -p "${FIXTURE}/.ci" "${FIXTURE}/.github" "${STUB_DIR}"
+  mkdir -p "${FIXTURE}/.ci" "${FIXTURE}/.github/workflows" "${STUB_DIR}"
   for linter in "${linters[@]}"; do
     printf '#!/bin/sh\nexit 0\n' > "${STUB_DIR}/${linter}"
     chmod +x "${STUB_DIR}/${linter}"
@@ -59,6 +59,7 @@ function make_lint_fixture() {
   printf 'BEGIN { exit 0 }\n' > "${FIXTURE}/scan.awk"
   printf '{ }\n' > "${FIXTURE}/flake.nix"
   printf '{}\n' > "${FIXTURE}/.github/renovate.json"
+  printf 'on: push\n' > "${FIXTURE}/.github/workflows/ci.yml"
   git -C "${FIXTURE}" init --quiet
   git -C "${FIXTURE}" add --all
 }
@@ -98,4 +99,16 @@ function gate_in_fixture() {
   assert_failure 1
   assert_output ''
   [[ "${stderr}" == *'[run-lint-checks] no markdown files found - this is a failure, not a clean pass'* ]]
+}
+
+@test "lint checks: a missing .github/workflows directory is a failure, not a clean pass" {
+  # actionlint finds the workflows by itself, so the gate runs it only when the
+  # directory is there; without it the step has linted nothing.
+  printf '# Title\n' > "${FIXTURE}/README.md"
+  git -C "${FIXTURE}" add -- 'README.md'
+  rm -r -- "${FIXTURE}/.github/workflows"
+  run --separate-stderr gate_in_fixture
+  assert_failure 1
+  assert_output ''
+  [[ "${stderr}" == *'[run-lint-checks] no .github/workflows directory found - this is a failure, not a clean pass'* ]]
 }
