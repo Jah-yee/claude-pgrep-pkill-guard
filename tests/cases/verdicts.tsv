@@ -1320,3 +1320,51 @@
 "pgrep --full x | (grep -v y || true) || kill 1"	warn
 "pgrep --full x | xargs &> /dev/null kill"	deny:kill
 "pgrep --full x |& time -p xargs kill"	deny:kill
+"pgrep --full x | sort | head"	allow
+"pgrep --full x | sort | uniq"	allow
+"pgrep --full x | sort"	allow
+"pgrep --full x | head"	allow
+"pgrep --full x | cat | cat | cat"	allow
+"pgrep --full x | sort | tee f"	allow
+"pgrep --full x | sort |& head"	allow
+"pgrep --full x |& sort"	allow
+"pgrep --full x 2>&1 | sort | head"	allow
+"pgrep --full x >&2 | sort | head"	allow
+"pgrep --full x |\nsort |\nhead"	allow
+"pgrep --full x | grep wc"	allow
+"pgrep --full x | echo wc"	allow
+"pgrep --full x | sort; echo y | wc -l"	allow
+"pgrep --full x | sort\necho y | wc -l"	allow
+"pgrep --full x & echo y | wc -l"	allow
+"pgrep --full x & echo y && echo z"	allow
+"pgrep --full x & echo y || echo z"	allow
+"pgrep --full x & echo y | xargs echo"	allow
+"pgrep --full x | sort & echo y && echo z"	allow
+"pgrep --full x | sort & echo y"	allow
+"pgrep --full x &\necho y | wc -l"	allow
+"pgrep --full x 2>&1"	allow
+"pgrep --full x &>/dev/null"	allow
+"pgrep --full x > f 2>&1 &"	allow
+"pgrep --full X $(echo a | xargs echo)"	allow
+"pgrep --full X | sort $(echo a | wc -l)"	allow
+"pgrep --full x | sort | wc -l"	warn
+"pgrep --full x |& wc -l"	warn
+"pgrep --full x | /usr/bin/wc -l"	warn
+"pgrep --full x | sudo wc -l"	warn
+"pgrep --full x | sudo -u root wc -l"	warn
+"pgrep --full x | sort | xargs echo"	warn
+"pgrep --full x | sort | sudo xargs echo"	warn
+"pgrep --full x | sort > f | wc -l"	warn
+"pgrep --full x || true"	warn
+"pgrep --full x || echo none"	warn
+"pgrep --full x && echo y"	warn
+"pgrep --full x | sort || echo none"	warn
+"pgrep --full x | sort && echo ok"	warn
+"pgrep --full x | sort | grep -q a && echo y"	warn
+"pgrep --full x 2>&1 && echo y"	warn
+"pgrep --full x &>/dev/null && echo y"	warn
+"pgrep --full x | sort | head; echo $?"	warn
+"(pgrep --full x || true) | sort"	warn
+"(pgrep --full x & wait) | wc -l"	warn
+"pgrep --full x | (sort && echo ok)"	warn
+"n=$(pgrep --full x | sort | head)"	warn
