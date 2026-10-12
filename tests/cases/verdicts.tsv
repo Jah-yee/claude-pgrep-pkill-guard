@@ -1432,3 +1432,59 @@
 "while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; for i in 1; do break \"2\"; done; sleep 1; done"	deny:task-poll
 "while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; break 08; done"	deny:task-poll
 "while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; for i in 1; do break; done; sleep 1; done"	allow
+"sudo -n -u root pkill --full X"	deny:kill
+"sudo -nu root pkill --full X"	deny:kill
+"sudo -iu root pkill --full X"	deny:kill
+"sudo -Eu root pkill --full X"	deny:kill
+"sudo -Hu root pkill --full X"	deny:kill
+"sudo -nu root -g wheel pkill --full X"	deny:kill
+"sudo -nu root -Eg wheel pkill --full X"	deny:kill
+"nohup sudo -nu root pkill --full X"	deny:kill
+"doas -nu root pkill --full X"	deny:kill
+"env -iu FOO pkill --full X"	deny:kill
+"timeout -vs TERM 5 pkill --full X"	deny:kill
+"ionice -tc 2 pkill --full X"	deny:kill
+"sudo -nu root kill $(pgrep --full X)"	deny:kill
+"pgrep --full X | xargs -rn 1 kill"	deny:kill
+"pgrep --full X | xargs -0n 1 kill"	deny:kill
+"pgrep --full X | xargs -tn 1 kill"	deny:kill
+"pgrep --full X | xargs -0rn 1 kill"	deny:kill
+"pgrep --full X | xargs -0I % kill %"	deny:kill
+"pgrep --full X | xargs -rI {} kill {}"	deny:kill
+"pgrep --full X | xargs -rI{} kill {}"	deny:kill
+"pgrep --full X | sudo -nu root xargs -rn 1 kill"	deny:kill
+"echo 'pkill --full X' | sudo -nu root bash"	deny:kill
+"sudo -nu root bash -c 'pkill --full X'"	deny:kill
+"while true; do sudo -nu root pgrep --full x && break; sleep 1; done"	deny:loop
+"sudo -En pkill --full X"	deny:kill
+"sudo -nuroot pkill --full X"	deny:kill
+"sudo -unroot pkill --full X"	deny:kill
+"pgrep --full X | xargs -rn1 kill"	deny:kill
+"pgrep --full X | xargs -n1r kill"	deny:kill
+"timeout -k5 5 pkill --full X"	deny:kill
+"sudo -nu root echo pkill --full X"	allow
+"sudo -nu root deploy.sh pkill --full X"	allow
+"sudo -u pkill --full X"	allow
+"sudo -nu pkill --full X"	allow
+"env -iu pkill --full X"	allow
+"pgrep --full X | xargs -rn kill"	warn
+"pgrep --full X | xargs -rn 1 echo kill"	warn
+"pgrep --full X | xargs -in kill"	deny:kill
+"pgrep --full X | xargs -iI kill I"	deny:kill
+"pgrep --full X | xargs -ia kill a"	deny:kill
+"pgrep --full X | xargs -eE kill"	deny:kill
+"pgrep --full X | xargs -rl1 kill"	deny:kill
+"pgrep --full X | xargs -ri kill {}"	deny:kill
+"pgrep --full X | xargs -tin 1 kill"	warn
+"watch -tn 1 'pkill --full X'"	deny:kill
+"watch -dn 1 sudo -nu root 'pkill --full X'"	deny:kill
+"sudo -nu root bash <<'EOF'\npkill --full X\nEOF"	deny:kill
+"echo 'pkill --full X' | sudo -Eu root sh"	deny:kill
+"pgrep --full X | while read -r p; do sudo -nu root kill \"$p\"; done"	deny:kill
+"until sudo -nu root pgrep --full x; do sleep 1; done"	deny:loop
+"pgrep --full X | sudo -nu root wc -l"	warn
+"sudo -nu \"$USER\" pkill --full X"	deny:kill
+"sudo -nu root -- pkill --full X"	deny:kill
+"exec -cla name pkill --full X"	deny:kill
+"env time -vo /tmp/t pkill --full X"	deny:kill
+"sudo -l -U bob pkill --full X"	allow
