@@ -401,6 +401,11 @@ function words() {
   assert_output 'a & & > f b | & > g c > & h'
 }
 
+@test "scanner: &> glued behind &&, || and |& is still one token" {
+  run words 'a &&&>f b ||&>g c |&&>>h d'
+  assert_output 'a & & &> f b | | &> g c | & &>> h d'
+}
+
 @test "scanner: an arrow inside a word splits as bash reads it" {
   run words 'echo a->b'
   assert_output 'echo a- > b'

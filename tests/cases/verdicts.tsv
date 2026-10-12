@@ -1523,3 +1523,18 @@
 "pgrep --full x & > /dev/null echo y | xargs kill"	allow
 "pkill >& f --full java"	deny:kill
 "pkill 2>&1 --full java"	deny:kill
+"pgrep --full x |&&>/dev/null xargs kill"	deny:kill
+"pgrep --full x |&&>>log xargs kill"	deny:kill
+"pgrep --full x |&&>f grep y | xargs kill"	deny:kill
+"pgrep --full x | grep y |&&>f xargs kill"	deny:kill
+"pgrep --full x |&&>f while read p; do kill $p; done"	deny:kill
+"pgrep --full x |&&>/dev/null wc -l"	warn
+"true ||&>/dev/null pkill --full X"	deny:kill
+"true &&&>/dev/null pkill --full X"	deny:kill
+"pkill&>/dev/null --full X"	deny:kill
+"pkill $(true)&>f --full X"	deny:kill
+"pkill &> >(cat) --full X"	deny:kill
+"kill &>f -9 $(pgrep --full x)"	deny:kill
+"if &>/dev/null pgrep --full x; then echo up; fi"	warn
+"echo hi&>f pkill --full X"	allow
+"kill $(echo 1 &>f pgrep --full x)"	allow
