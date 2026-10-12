@@ -727,7 +727,7 @@ permanently and drag the figure down. These shapes do it here:
 - **A `case` arm whose pattern sits alone on its line.** xtrace records the arm's
   body, never its pattern, so `'(')` on its own line reads as uncovered while the
   line below it — the arm actually taken — reads as covered. An arm written on a
-  single line (`'do') depth="$((depth + 1))" ;;`) does not have the problem.
+  single line (`'do') body_depth="$((body_depth + 1))" ;;`) does not have the problem.
 
 Together these account for a large share of the uncovered lines in `hooks/`,
 among them the continuation lines of the messages in
