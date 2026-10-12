@@ -14,7 +14,8 @@
 # mandatory belong here. GNU spells `-e`, `-i` and `-l` with an OPTIONAL
 # argument, which the shell can only attach (`-i%`), never separate --
 # so `xargs -i kill {}` runs kill, and listing them would swallow the very
-# command word tokens::prefix_chain_step is looking for. Over-consuming hides
+# command word tokens::prefix_chain_step is looking for. tokens::prefix_value_option
+# reads them inside a cluster of short flags for the same reason. Over-consuming hides
 # a kill; under-consuming only costs a warn, so the doubtful cases stay out.
 # `-J` is BSD/macOS-only and has no GNU meaning, so it is safe to carry here.
 readonly -a XARGS_VALUE_OPTIONS=(

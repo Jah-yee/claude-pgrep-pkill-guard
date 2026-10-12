@@ -144,9 +144,14 @@ function tokens::prefix_value_spelling() {
 #              A word of several short flags (`sudo -nu root`, `xargs -rn 1`) is read as getopt
 #              reads it: the first letter that takes a value ends the flags. When it is the last
 #              letter the value is the next word; otherwise the rest of the word is the value
-#              (`-nuroot`, `-rn1`) and nothing more is consumed. A value-taking letter the table
-#              lacks, in front of one it holds, makes this consume the command word's place; the
-#              word after it is then read as the command, which errs toward a deny.
+#              (`-nuroot`, `-rn1`) and nothing more is consumed. GNU xargs takes the argument of
+#              `-e`, `-i` and `-l` only attached, so one of those letters ends the flags the same
+#              way and consumes nothing: in `xargs -in kill` the `n` is the replace string and
+#              `kill` the command.
+#
+#              A value-taking letter the table lacks, in front of one it holds, is the leak
+#              tokens::prefix_value_spelling describes in another place: the word after the cluster
+#              is skipped as a value when it is the command.
 # @arg $1 prefix the prefix command, already reduced to its basename
 # @arg $2 word the option word to test
 # @exitcode 0 the option consumes the next word
@@ -157,6 +162,9 @@ function tokens::prefix_value_option() {
   tokens::prefix_value_spelling "${prefix}" "${word}" && return 0
   [[ "${word}" =~ ^-[A-Za-z0-9]{2,}$ ]] || return 1
   for ((i = 1; i < ${#word}; i++)); do
+    if [[ "${prefix}" == 'xargs' && "${word:i:1}" == [eil] ]]; then
+      return 1
+    fi
     if tokens::prefix_value_spelling "${prefix}" "-${word:i:1}"; then
       if ((i == ${#word} - 1)); then
         return 0
