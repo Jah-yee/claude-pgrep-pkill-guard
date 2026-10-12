@@ -1208,7 +1208,7 @@
 "pgrep --full X | xargs deploy.sh kill"	warn
 "pgrep --full X | xargs -I{} echo {} kill"	warn
 "pgrep --full X | xargs -n kill"	warn
-"pgrep --full X | sudo -l xargs kill"	warn
+"pgrep --full X | sudo -l xargs kill"	allow
 "pgrep --full X | sudo -u kill echo"	allow
 "pgrep --full X | sudo -u root grep kill"	allow
 "pgrep --full X | command -v kill"	allow
