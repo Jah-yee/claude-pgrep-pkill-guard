@@ -132,7 +132,7 @@ function tokens::prefix_value_option() {
         *) return 1 ;;
       esac
       ;;
-    # xargs keeps its option table next to the pipeline scan that also reads it.
+    # The xargs option table is in consumption.sh.
     'xargs') consumption::is_xargs_value_option "${word}" ;;
     *) return 1 ;;
   esac
@@ -223,8 +223,8 @@ function tokens::prefix_breaks_chain() {
 
 # @description Advance command-position tracking by one token and report whether the word AFTER it
 #              is in command position. This is the whole prefix-chain rule, in one place because
-#              scanner::find_invocations and wrappers::shell_wrapper_payloads both need it and a second copy would
-#              drift.
+#              scanner::find_invocations, wrappers::shell_wrapper_payloads and
+#              consumption::feeds_a_kill_forward all need it and a second copy would drift.
 #
 #              An operator or keyword restores command position and clears the chain, except that a
 #              `|` leaves the sentinel `pipe` in it, because `time` is the reserved word only in a

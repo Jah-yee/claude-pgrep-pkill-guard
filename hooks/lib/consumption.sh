@@ -14,8 +14,8 @@
 # mandatory belong here. GNU spells `-e`, `-i` and `-l` with an OPTIONAL
 # argument, which the shell can only attach (`-i%`), never separate --
 # so `xargs -i kill {}` runs kill, and listing them would swallow the very
-# command word this scan exists to find. Over-consuming hides a kill; under-
-# consuming only costs a warn, so the doubtful cases stay out.
+# command word tokens::prefix_chain_step is looking for. Over-consuming hides
+# a kill; under-consuming only costs a warn, so the doubtful cases stay out.
 # `-J` is BSD/macOS-only and has no GNU meaning, so it is safe to carry here.
 readonly -a XARGS_VALUE_OPTIONS=(
   '-a' '--arg-file' '-d' '--delimiter' '-E' '-I' '-J' '-L' '-n' '--max-args'
@@ -37,32 +37,72 @@ function consumption::is_xargs_value_option() {
   return 1
 }
 
-# @description Forward form of consumption::feeds_a_kill: the invocation's output is piped, directly or through
-#              `xargs`, into a `kill`. `kill` must head a pipeline segment, or follow an `xargs` that
-#              heads one, with flags and prefix words allowed in between: `pgrep --full x | grep -i
-#              kill` merely searches for the word and kills nothing. A segment headed by
-#              `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`) defers to
-#              loops::loop_body_has_kill rather than being written off as `other`.
+# @description Forward form of consumption::feeds_a_kill: the invocation's output is piped into a `kill`.
+#              `kill` must be the command word of a later pipeline stage, found by stepping
+#              tokens::prefix_chain_step over the stage: prefix words, their options, option values
+#              and operands, and assignment words may stand in front of it (`| xargs kill`,
+#              `| sudo -u root xargs -n 1 kill`, `| xargs timeout 5 kill`), while
+#              `pgrep --full x | grep -i kill` merely searches for the word and
+#              `| xargs sudo -u kill echo` names a user. A `$(...)`, `$((...))`, backtick or
+#              process-substitution region is stepped over whole, as the one word it is
+#              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. A stage
+#              headed by `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`)
+#              defers to loops::loop_body_has_kill. A stage that opens with a group or a subshell is
+#              not read.
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
-# @arg $3 target index of the invocation token
+# @arg $3 kills_var name of the caller's array holding an entry at the index of every `kill` in
+#         command position
+# @arg $4 target index of the invocation token
 # @exitcode 0 a kill consumes the output downstream
 # @exitcode 1 it does not
 function consumption::feeds_a_kill_forward() {
   local -n toks="$1"
-  local -r tokens_var="$1" openers_var="$2" target="$3"
-  # shellcheck disable=SC2034 # written through tokens::redirection_step's nameref, which shellcheck cannot follow
-  local idx segment='none' word xargs_skip=0 prev='none' redir=''
+  local -n openers="$2"
+  local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
+  # shellcheck disable=SC2034 # redir and the chain state are written through namerefs, which shellcheck cannot follow
+  local idx segment='none' token word prev='none' redir='' chain='' chain_skip=0 chain_operands=0 at_cmd=0
+  local close opener
+  local -a closers=()
+  for close in "${!openers[@]}"; do
+    closers["${openers[close]}"]="${close}"
+  done
   for ((idx = target + 1; idx < ${#toks[@]}; idx++)); do
-    # A redirection (`| >f xargs kill`, `xargs 2>&1 kill`) is neither a command word nor an operand.
-    tokens::redirection_step "${toks[idx]}" redir && continue
-    word="${toks[idx]##*/}"
-    case "${word}" in
+    token="${toks[idx]}"
+    if [[ -n "${closers[idx]:-}" ]]; then
+      # A region is one word of its simple command. The `$` word in front of a `$(` has been
+      # stepped already, and an assignment word holds its backtick region; any other backtick
+      # pair or process substitution is a word of its own.
+      opener="${idx}"
+      idx="${closers[idx]}"
+      # The closing quote of `"$(...)"` is one byte of the scanner's quote filler, and ends the
+      # same word.
+      if [[ "${toks[idx + 1]:-}" == $'\001' ]]; then
+        idx="$((idx + 1))"
+      fi
+      if [[ "${token}" == '(' ]] \
+        || tokens::region_holds_assignment "${tokens_var}" "${openers_var}" "${opener}"; then
+        continue
+      fi
+      token='procsub'
+    elif tokens::redirection_step "${token}" redir; then
+      # A redirection (`| >f xargs kill`, `xargs 2>&1 kill`) is neither a command word nor an operand.
+      continue
+    fi
+    word="${token##*/}"
+    case "${token}" in
       '|')
+        # The `pipe` sentinel is the one tokens::prefix_chain_step leaves after a `|`: a `time`
+        # there is GNU time, with options of its own.
         segment='head'
-        xargs_skip=0
+        at_cmd=1
+        chain='pipe'
+        chain_skip=0
+        # shellcheck disable=SC2034 # read through tokens::prefix_chain_step's nameref
+        chain_operands=0
         prev='|'
+        continue
         ;;
       ';') break ;;
       '<NL>')
@@ -70,115 +110,45 @@ function consumption::feeds_a_kill_forward() {
         # not end the command there, and the kill is usually on the next line.
         # A newline anywhere else does end it.
         [[ "${prev}" == '|' ]] || break
-        ;;
-      *)
-        prev="${word}"
-        case "${segment}" in
-          'head')
-            case "${word}" in
-              'kill') return 0 ;;
-              'xargs')
-                segment='xargs'
-                xargs_skip=0
-                ;;
-              'while' | 'until')
-                loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${idx}" && return 0
-                segment='other'
-                ;;
-              *)
-                if ! tokens::is_prefix_command "${word}"; then
-                  segment='other'
-                fi
-                ;;
-            esac
-            ;;
-          'xargs')
-            if ((xargs_skip == 1)); then
-              # Value word belonging to the option before it, not a command.
-              xargs_skip=0
-            else
-              case "${word}" in
-                'kill') return 0 ;;
-                '{' | '}')
-                  : # `-I{}` placeholder braces, not a new command word
-                  ;;
-                # Every XARGS_VALUE_OPTIONS entry starts with a dash, so the
-                # value-option test belongs here and nowhere else.
-                -*)
-                  if consumption::is_xargs_value_option "${word}"; then
-                    xargs_skip=1
-                  fi
-                  ;;
-                *)
-                  if ! tokens::is_prefix_command "${word}"; then
-                    segment='other'
-                  fi
-                  ;;
-              esac
-            fi
-            ;;
-        esac
+        continue
         ;;
     esac
+    prev="${word}"
+    [[ "${segment}" == 'head' ]] || continue
+    # The braces of an `xargs -I{}` placeholder are tokens of their own. Among xargs's own words
+    # they are an option's value or an argument, not a group, and the word after them can still
+    # be the command (`xargs -I{} kill {}`). Behind any other prefix `{}` is the command it runs.
+    if [[ "${token}" == '{' || "${token}" == '}' ]] && [[ "${chain}" == 'xargs' ]]; then
+      chain_skip=0
+      at_cmd=1
+      continue
+    fi
+    if tokens::is_operator "${token}"; then
+      segment='other'
+      continue
+    fi
+    if ((at_cmd == 1)); then
+      case "${word}" in
+        'kill') return 0 ;;
+        'while' | 'until')
+          loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${kills_var}" "${idx}" && return 0
+          segment='other'
+          continue
+          ;;
+      esac
+    fi
+    if tokens::prefix_chain_step "${token}" "${word}" "${at_cmd}" chain chain_skip chain_operands; then
+      at_cmd=1
+    else
+      at_cmd=0
+      # Out of command position with no option value pending: the stage's command word has gone
+      # by, and it was not a kill.
+      if ((chain_skip == 0)); then
+        segment='other'
+      fi
+    fi
   done
   return 1
-}
-
-# @description Whether the `kill` whose predecessor token sits at `index` is in command position.
-#              Walks back past prefix commands (`sudo kill`), assignment words (`FOO=bar kill`) and
-#              redirections (`>f kill`);
-#              an operator or keyword there means command position. `(` restores command position
-#              for a real subshell or grouping construct, but `name=(...)` is an array literal: the
-#              `(` merely opens a list of words, and a `kill` immediately inside it is never invoked.
-#              The token right before the `(` ending in `=` is what tells them apart.
-#              A `$(...)`, `$((...))`, backtick or process-substitution region that closed right
-#              before the `kill` is a word, so the `kill` is its argument (`echo $(true) kill`,
-#              `echo <(true) kill`) -- unless the region is the value of an assignment word
-#              (`` FOO=`true` kill ``, `FOO=<(true) kill`), which the walk steps over.
-# @arg $1 tokens_var name of the caller's token array
-# @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
-#         region to the index of the token that opened it
-# @arg $3 index index of the token immediately before the `kill` word
-# @exitcode 0 the kill is in command position
-# @exitcode 1 it is an argument word, or sits inside an array literal
-function consumption::kill_in_command_position() {
-  local -n toks="$1"
-  local -n openers="$2"
-  local -r tokens_var="$1"
-  local index="$3" span opener
-  while ((index >= 0)); do
-    # A redirection in front of the `kill` (`>f kill $(pgrep ...)`) is skipped whole, target
-    # included, before the word it would otherwise stop on.
-    tokens::redirection_span_back "${tokens_var}" "${index}" span
-    if ((span > 0)); then
-      index="$((index - span))"
-      continue
-    fi
-    if [[ -n "${openers[index]:-}" ]]; then
-      opener="${openers[index]}"
-      if [[ "${toks[opener]}" == '`' ]]; then
-        # A backtick has no `$` word of its own to stand for the region: a glued assignment name
-        # before it is the only thing that makes the region a value rather than the command word.
-        ((opener > 0)) && [[ "${toks[opener - 1]}" == *= ]] || return 1
-        index="$((opener - 2))"
-      else
-        index="$((opener - 1))"
-      fi
-      continue
-    fi
-    if tokens::is_prefix_command "${toks[index]##*/}" || tokens::is_assignment_word "${toks[index]}"; then
-      index="$((index - 1))"
-      continue
-    fi
-    if [[ "${toks[index]}" == '(' ]] && ((index > 0)) && [[ "${toks[index - 1]}" == *= ]]; then
-      return 1
-    fi
-    if tokens::is_operator "${toks[index]}" || tokens::is_keyword "${toks[index]}"; then
-      return 0
-    fi
-    return 1
-  done
-  return 0
 }
 
 # @description Backward form of consumption::feeds_a_kill: `kill $(pgrep ...)`, `kill -9 foo $(pgrep ...)`,
@@ -188,10 +158,11 @@ function consumption::kill_in_command_position() {
 #              are all arguments of that `kill` and are stepped over, and so is any earlier whole
 #              `$(...)`, `$((...))`, backtick or process-substitution region (`kill $(true) $(pgrep ...)`,
 #              `kill <(true) $(pgrep ...)`), which is one word of it. An operator or a keyword ends
-#              the walk. The `kill` must then be in command position -- otherwise `echo kill $(...)`,
-#              where `kill` is merely an argument word, would be denied -- and one that is not is an
-#              argument word like any other, so the walk goes on to a real `kill` before it
-#              (`kill foo kill $(...)`). A bare `in` is only a for/select head -- and thus worth
+#              the walk. The `kill` must then be in command position, as scanner::find_invocations
+#              recorded it (`sudo -u root kill $(...)`, `timeout 5 kill $(...)`) -- otherwise
+#              `echo kill $(...)`, where `kill` is merely an argument word, would be denied -- and one
+#              that is not is an argument word like any other, so the walk goes on to a real `kill`
+#              before it (`kill foo kill $(...)`). A bare `in` is only a for/select head -- and thus worth
 #              deferring to loops::loop_body_has_kill -- when the token two back (past the loop
 #              variable) is actually `for`/`select`; otherwise it is an ordinary argument word
 #              (`echo in $(...)`) and the forward walk in loops::loop_body_has_kill could cross into
@@ -199,13 +170,16 @@ function consumption::kill_in_command_position() {
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
-# @arg $3 target index of the invocation token
+# @arg $3 kills_var name of the caller's array holding an entry at the index of every `kill` in
+#         command position
+# @arg $4 target index of the invocation token
 # @exitcode 0 a kill consumes the substitution
 # @exitcode 1 it does not
 function consumption::feeds_a_kill_backward() {
   local -n toks="$1"
   local -n openers="$2"
-  local -r tokens_var="$1" openers_var="$2" target="$3"
+  local -n kills="$3"
+  local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
   local word k="$((target - 1))" span
   while ((k >= 0)); do
     # A redirection between the substitution's opener and the invocation
@@ -224,13 +198,13 @@ function consumption::feeds_a_kill_backward() {
     case "${word}" in
       '$' | '(' | '`') ;;
       'kill')
-        # The left side of `&&`: its non-zero status means "not in command position, keep walking",
-        # and errexit and the ERR trap both leave it alone there.
-        consumption::kill_in_command_position "${tokens_var}" "${openers_var}" "$((k - 1))" && return 0
+        if [[ -n "${kills[k]:-}" ]]; then
+          return 0
+        fi
         ;;
       'in')
         if ((k >= 2)) && { [[ "${toks[k - 2]}" == 'for' ]] || [[ "${toks[k - 2]}" == 'select' ]]; }; then
-          loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${k}" && return 0
+          loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${kills_var}" "${k}" && return 0
         fi
         return 1
         ;;
@@ -252,13 +226,15 @@ function consumption::feeds_a_kill_backward() {
 # @arg $1 tokens_var name of the caller's token array (built once by classify::classify_command; every
 #         invocation in the same command reuses it rather than re-parsing the token stream)
 # @arg $2 openers_var name of the caller's region-opener array, built alongside the token array
-# @arg $3 target index of the invocation token
+# @arg $3 kills_var name of the caller's array holding an entry at the index of every `kill` in
+#         command position, as scanner::find_invocations reported them
+# @arg $4 target index of the invocation token
 # @exitcode 0 output feeds a kill
 # @exitcode 1 it does not
 function consumption::feeds_a_kill() {
-  local -r tokens_var="$1" openers_var="$2" target="$3"
-  consumption::feeds_a_kill_forward "${tokens_var}" "${openers_var}" "${target}" \
-    || consumption::feeds_a_kill_backward "${tokens_var}" "${openers_var}" "${target}"
+  local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
+  consumption::feeds_a_kill_forward "${tokens_var}" "${openers_var}" "${kills_var}" "${target}" \
+    || consumption::feeds_a_kill_backward "${tokens_var}" "${openers_var}" "${kills_var}" "${target}"
 }
 
 # @description True when an invocation sits inside a command substitution, so its output is captured

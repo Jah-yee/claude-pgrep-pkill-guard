@@ -77,14 +77,20 @@ function scanner::scan_command() {
 #              saved before it and the close steps the one word it stands for, unless it touches a
 #              word before it. A token that touches the close (`$(true)pkill`) continues the same
 #              word: it is not a command word, and a word glued to an assignment stays part of it.
+#
+#              A `kill` in command position is reported the same way, for the walks that ask whether
+#              a kill consumes an invocation's output, so `sudo -u root kill` and `timeout 5 kill`
+#              are kills and `sudo -u kill echo` is not. The `(` of `name=(...)` opens a list of
+#              words and not a subshell, and a `kill` among the words in front of that list's first
+#              operator is not reported.
 # @arg $1 command the raw command string
 # @arg $2 tokens newline-separated "<offset>\t<token>" records from scanner::scan_command
-# @stdout lines of "<index>\t<offset>\t<basename>"
+# @stdout lines of "<index>\t<offset>\t<basename>", the basename being `pgrep`, `pkill` or `kill`
 function scanner::find_invocations() {
   local -r command="$1" tokens="$2"
   # shellcheck disable=SC2034 # written through tokens::prefix_chain_step's namerefs, which shellcheck cannot follow
   local at_cmd=1 idx=0 offset token word chain='' chain_skip=0 chain_operands=0 redir='' kind glued_back
-  local glued_open=0 tail_end=-1 glued_tail
+  local glued_open=0 tail_end=-1 glued_tail array_words=0
   local -a saved=()
   local -A region=()
   while IFS=$'\t' read -r offset token; do
@@ -139,8 +145,20 @@ function scanner::find_invocations() {
       continue
     fi
     word="${token##*/}"
-    if ((at_cmd == 1)) && [[ "${word}" == 'pgrep' || "${word}" == 'pkill' ]]; then
-      printf '%s\t%s\t%s\n' "${idx}" "${offset}" "${word}"
+    if [[ "${token}" == '(' && "${region[prev_token]}" == *= ]]; then
+      array_words=1
+    elif tokens::is_operator "${token}"; then
+      array_words=0
+    fi
+    if ((at_cmd == 1)); then
+      case "${word}" in
+        'pgrep' | 'pkill') printf '%s\t%s\t%s\n' "${idx}" "${offset}" "${word}" ;;
+        'kill')
+          if ((array_words == 0)); then
+            printf '%s\t%s\t%s\n' "${idx}" "${offset}" "${word}"
+          fi
+          ;;
+      esac
     fi
     if tokens::prefix_chain_step "${token}" "${word}" "${at_cmd}" chain chain_skip chain_operands; then
       at_cmd=1

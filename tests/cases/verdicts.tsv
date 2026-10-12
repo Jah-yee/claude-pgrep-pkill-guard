@@ -1163,3 +1163,69 @@
 "watch -n 1 sudo 'pkill' --full X"	deny:kill
 "watch sudo 'echo PAYLOAD_RAN'"	allow
 "watch -x sudo 'pkill --full X'"	allow
+"sudo -u root kill $(pgrep --full X)"	deny:kill
+"timeout 5 kill $(pgrep --full X)"	deny:kill
+"env -u FOO kill $(pgrep --full X)"	deny:kill
+"nice -n 5 kill $(pgrep --full X)"	deny:kill
+"for p in $(pgrep --full X); do timeout 5 kill $p; done"	deny:kill
+"pgrep --full X | sudo -u root xargs kill"	deny:kill
+"pgrep --full X | nice -n 5 xargs -n 1 kill"	deny:kill
+"pgrep --full X | xargs ionice -c 2 kill"	deny:kill
+"pgrep --full X | xargs taskset -c 0 kill"	deny:kill
+"pgrep --full X | xargs timeout 5 kill"	deny:kill
+"pgrep --full X | xargs sudo -u bob kill"	deny:kill
+"for p in $(pgrep --full X); do sudo kill $p; done"	deny:kill
+"for p in $(pgrep --full X); do FOO=1 kill $p; done"	deny:kill
+"pgrep --full X | while read -r p; do sudo -u root kill $p; done"	deny:kill
+"pgrep --full X | xargs -n 1 sudo -u bob kill"	deny:kill
+"pgrep --full X | xargs -I{} sudo -u bob kill {}"	deny:kill
+"pgrep --full X | xargs -I {} kill {}"	deny:kill
+"pgrep --full X | sudo -u root kill"	deny:kill
+"pgrep --full X | timeout -s TERM 5 xargs timeout 5 kill"	deny:kill
+"pgrep --full X | FOO=1 xargs kill"	deny:kill
+"pgrep --full X | xargs env FOO=1 kill"	deny:kill
+"pgrep --full X | watch -n 5 kill"	deny:kill
+"pgrep --full X | /usr/bin/xargs sudo -u root /bin/kill"	deny:kill
+"sudo -u root env -u A kill $(pgrep --full X)"	deny:kill
+"sudo -- kill $(pgrep --full X)"	deny:kill
+"sudo --user=root kill $(pgrep --full X)"	deny:kill
+"sudo -u root /bin/kill $(pgrep --full X)"	deny:kill
+"sudo -u $(whoami) kill $(pgrep --full X)"	deny:kill
+"sudo -u root kill $(true) $(pgrep --full X)"	deny:kill
+"timeout 5 kill `pgrep --full X`"	deny:kill
+"time -p kill $(pgrep --full X)"	deny:kill
+"if sudo -u root kill $(pgrep --full X); then echo y; fi"	deny:kill
+"sudo -u kill echo $(pgrep --full X)"	warn
+"nice -n kill echo $(pgrep --full X)"	warn
+"sudo -l kill $(pgrep --full X)"	warn
+"command -v kill $(pgrep --full X)"	warn
+"sudo deploy.sh kill $(pgrep --full X)"	warn
+"echo timeout 5 kill $(pgrep --full X)"	warn
+"sudo -u root echo $(true) kill $(pgrep --full X)"	warn
+"x=(sudo kill $(pgrep --full X))"	warn
+"for p in $(pgrep --full X); do sudo -u kill echo $p; done"	warn
+"pgrep --full X | xargs sudo -u kill echo"	warn
+"pgrep --full X | xargs deploy.sh kill"	warn
+"pgrep --full X | xargs -I{} echo {} kill"	warn
+"pgrep --full X | xargs -n kill"	warn
+"pgrep --full X | sudo -l xargs kill"	warn
+"pgrep --full X | sudo -u kill echo"	allow
+"pgrep --full X | sudo -u root grep kill"	allow
+"pgrep --full X | command -v kill"	allow
+"pgrep --full X | while read -r p; do echo kill $p; done"	allow
+"pgrep --full X | sudo -u $(whoami) xargs kill"	deny:kill
+"pgrep --full X | xargs -P $(nproc) kill"	deny:kill
+"pgrep --full X | xargs -P \"$(nproc)\" kill"	deny:kill
+"pgrep --full X | xargs -n $((1)) kill"	deny:kill
+"pgrep --full X | timeout $(echo 5) xargs kill"	deny:kill
+"pgrep --full X | FOO=$(true) xargs kill"	deny:kill
+"pgrep --full X | FOO=`true` xargs kill"	deny:kill
+"pgrep --full X | xargs sudo -u $(whoami) kill"	deny:kill
+"pgrep --full X | xargs -a <(echo PAYLOAD_RAN) kill"	deny:kill
+"pgrep --full X | xargs -P `nproc` kill"	deny:kill
+"pgrep --full X | xargs $(echo a) kill"	warn
+"pgrep --full X | xargs `echo a` kill"	warn
+"pgrep --full X | xargs <(echo a) kill"	warn
+"pgrep --full X | nice {} kill"	allow
+"pgrep --full X | sudo {} kill"	allow
+"pgrep --full X | timeout 5 {} kill"	allow

@@ -132,21 +132,25 @@ function classify::probe_keys() {
 #              it never clears a loop.
 # @arg $1 tokens_var name of the command's token array
 # @arg $2 openers_var name of the array that maps each region-closing token's index to its opener's
-# @arg $3 command the raw command
-# @arg $4 tokens the scanner's token stream for the command
-# @arg $5 idx the invocation's token index
-# @arg $6 name `pgrep` or `pkill`
-# @arg $7 args the invocation's argument tokens (scanner::invocation_args output)
+# @arg $3 kills_var name of the array that holds an entry at the index of every `kill` in command
+#         position
+# @arg $4 command the raw command
+# @arg $5 tokens the scanner's token stream for the command
+# @arg $6 idx the invocation's token index
+# @arg $7 name `pgrep` or `pkill`
+# @arg $8 args the invocation's argument tokens (scanner::invocation_args output)
 # @stdout `deny:kill<TAB>name`, `deny:loop<TAB>name`, or `warn`
 # @exitcode 0 a verdict was printed
 # @exitcode 1 the invocation is clean or exempt; nothing printed
 function classify::classify_invocation() {
-  local -r tokens_var="$1" openers_var="$2" command="$3" tokens="$4" idx="$5" name="$6" args="$7"
+  local -r tokens_var="$1" openers_var="$2" kills_var="$3" command="$4" tokens="$5"
+  local -r idx="$6" name="$7" args="$8"
   local operand context ignores_ancestors=0
   scanner::has_flag "${args}" '--ignore-ancestors' 'A' && ignores_ancestors=1
   operand="$(scanner::pattern_operand "${command}" "${args}")"
   scanner::bracket_mitigation_holds "${command}" "${operand}" && return 1
-  if [[ "${name}" == 'pkill' ]] || consumption::feeds_a_kill "${tokens_var}" "${openers_var}" "${idx}"; then
+  if [[ "${name}" == 'pkill' ]] \
+    || consumption::feeds_a_kill "${tokens_var}" "${openers_var}" "${kills_var}" "${idx}"; then
     ((ignores_ancestors == 1)) && return 1
     printf 'deny:kill\t%s\n' "${name}"
     return 0
@@ -217,7 +221,7 @@ function classify::classify_wrapper_payloads() {
 # @stdout allow, warn, inactive (the scanner stream failed its integrity check, here or in a wrapper
 #         payload), or deny:loop / deny:kill / deny:task-poll followed by a tab and the invoked
 #         tool (or, for task-poll, the polled path)
-# shellcheck disable=SC2034 # region and cmd_openers are written through namerefs, which shellcheck cannot follow
+# shellcheck disable=SC2034 # region, cmd_openers and cmd_kills are used through namerefs, unseen by shellcheck
 function classify::classify_command() {
   local -r command="$1" depth="${2:-0}"
   if [[ "${command}" != *pgrep* && "${command}" != *pkill* && "${command}" != *.output* ]]; then
@@ -272,12 +276,20 @@ function classify::classify_command() {
   if [[ "${command}" == *pgrep* || "${command}" == *pkill* ]]; then
     invocations="$(scanner::find_invocations "${command}" "${tokens}")"
   fi
+  # scanner::find_invocations reports each command-position `kill` beside the invocations. A kill
+  # can stand after the invocation it consumes, so they are all collected before any is classified.
+  local -a cmd_kills=()
   while IFS=$'\t' read -r idx offset name; do
-    [[ -z "${idx}" ]] && continue
+    if [[ "${name}" == 'kill' ]]; then
+      cmd_kills[idx]=1
+    fi
+  done <<< "${invocations}"
+  while IFS=$'\t' read -r idx offset name; do
+    [[ -z "${idx}" || "${name}" == 'kill' ]] && continue
     args="$(scanner::invocation_args "${command}" "${tokens}" "${idx}")"
     scanner::has_flag "${args}" '--full' 'f' || continue
-    if invocation_finding="$(classify::classify_invocation cmd_tokens cmd_openers "${command}" "${tokens}" \
-      "${idx}" "${name}" "${args}")"; then
+    if invocation_finding="$(classify::classify_invocation cmd_tokens cmd_openers cmd_kills "${command}" \
+      "${tokens}" "${idx}" "${name}" "${args}")"; then
       case "${invocation_finding}" in
         deny:*)
           printf '%s\n' "${invocation_finding}"
