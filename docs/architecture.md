@@ -268,7 +268,8 @@ cuts each outermost `$(...)`, `$((...))`, backtick and process-substitution regi
 wrapper reader walks, scans the region's own tokens for wrappers separately, and
 leaves the heredoc ordinals of what follows in step; `scanner::invocation_args`
 skips the regions after an invocation's name; and the backward walk from a `pgrep`
-to a `kill` steps over a region that closed before it, through the opener index
+to a `kill` steps over a region that closed before it, and leaves the region that
+holds the `pgrep` at an operator inside it, through the opener index
 `classify::classify_command` builds beside the token array. Regions close at the
 scanner's first `)`, so a `)` left over inside one (`$( (true) )`) still reads as an
 operator to those walks, a known limit.
