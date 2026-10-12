@@ -48,7 +48,15 @@ function consumption::is_xargs_value_option() {
 #              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. A stage
 #              headed by `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`)
 #              defers to loops::loop_body_has_kill. A stage that opens with a group or a subshell is
-#              not read.
+#              not read. The scan follows the invocation's own pipeline and no further: `|` and `|&`
+#              carry it into the next stage, and `;` and a newline that does not follow a pipe end
+#              it. `||`, `&&` and a lone `&` end it too, because what stands behind them reads
+#              nothing the invocation wrote (`pgrep --full x || kill 1`,
+#              `pgrep --full x & echo y | xargs kill`) -- unless a group or subshell holds them.
+#              Inside one that a stage of this pipeline opened, the command behind the operator
+#              still reads the pipe (`pgrep --full x | (grep -v y || xargs kill)`). Inside one the
+#              invocation itself sits in, the output is the group's, so the scan goes on from the
+#              group's closer (`(pgrep --full x || true) | xargs kill`).
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
@@ -63,7 +71,7 @@ function consumption::feeds_a_kill_forward() {
   local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
   # shellcheck disable=SC2034 # redir and the chain state are written through namerefs, which shellcheck cannot follow
   local idx segment='none' token word prev='none' redir='' chain='' chain_skip=0 chain_operands=0 at_cmd=0
-  local close opener
+  local close opener operator span depth=0 nest ahead closer
   local -a closers=()
   for close in "${!openers[@]}"; do
     closers["${openers[close]}"]="${close}"
@@ -91,19 +99,62 @@ function consumption::feeds_a_kill_forward() {
       continue
     fi
     word="${token##*/}"
-    case "${token}" in
-      '|')
-        # The `pipe` sentinel is the one tokens::prefix_chain_step leaves after a `|`: a `time`
-        # there is GNU time, with options of its own.
+    if [[ "${token}" == '|' || "${token}" == '&' ]]; then
+      tokens::list_operator_at "${tokens_var}" "${idx}" operator span
+      case "${operator}" in
+        'pipe')
+          # The `pipe` sentinel is the one tokens::prefix_chain_step leaves after a `|`: a `time`
+          # there is GNU time, with options of its own.
+          segment='head'
+          at_cmd=1
+          chain='pipe'
+          chain_skip=0
+          # shellcheck disable=SC2034 # read through tokens::prefix_chain_step's nameref
+          chain_operands=0
+          prev='|'
+          idx="$((idx + span - 1))"
+          continue
+          ;;
+        # The `&` of `&>`: tokens::redirection_step takes the `>` and its target from here.
+        'redirection') continue ;;
+      esac
+      idx="$((idx + span - 1))"
+      if ((depth > 0)); then
+        # Inside a group a later stage opened: the next command reads the same pipe.
         segment='head'
         at_cmd=1
-        chain='pipe'
+        chain=''
         chain_skip=0
         # shellcheck disable=SC2034 # read through tokens::prefix_chain_step's nameref
         chain_operands=0
-        prev='|'
         continue
-        ;;
+      fi
+      # The closer of a group the invocation sits in, if there is one: the first `)` or `}` ahead
+      # that nothing ahead opened.
+      nest=0
+      closer=-1
+      for ((ahead = idx + 1; ahead < ${#toks[@]}; ahead++)); do
+        if [[ -n "${closers[ahead]:-}" ]]; then
+          ahead="${closers[ahead]}"
+          continue
+        fi
+        case "${toks[ahead]}" in
+          '(' | '{') nest="$((nest + 1))" ;;
+          ')' | '}')
+            if ((nest == 0)); then
+              closer="${ahead}"
+              break
+            fi
+            nest="$((nest - 1))"
+            ;;
+        esac
+      done
+      ((closer >= 0)) || break
+      idx="${closer}"
+      segment='other'
+      continue
+    fi
+    case "${token}" in
       ';') break ;;
       '<NL>')
         # A newline after a trailing `|` continues the pipeline -- bash does
@@ -114,15 +165,25 @@ function consumption::feeds_a_kill_forward() {
         ;;
     esac
     prev="${word}"
-    [[ "${segment}" == 'head' ]] || continue
     # The braces of an `xargs -I{}` placeholder are tokens of their own. Among xargs's own words
     # they are an option's value or an argument, not a group, and the word after them can still
     # be the command (`xargs -I{} kill {}`). Behind any other prefix `{}` is the command it runs.
-    if [[ "${token}" == '{' || "${token}" == '}' ]] && [[ "${chain}" == 'xargs' ]]; then
+    if [[ "${segment}" == 'head' && "${chain}" == 'xargs' ]] && [[ "${token}" == '{' || "${token}" == '}' ]]; then
       chain_skip=0
       at_cmd=1
       continue
     fi
+    # The groups and subshells opened since the invocation. A closer with none open closes
+    # one the invocation sits in, or is a `case` pattern's.
+    case "${token}" in
+      '(' | '{') depth="$((depth + 1))" ;;
+      ')' | '}')
+        if ((depth > 0)); then
+          depth="$((depth - 1))"
+        fi
+        ;;
+    esac
+    [[ "${segment}" == 'head' ]] || continue
     if tokens::is_operator "${token}"; then
       segment='other'
       continue

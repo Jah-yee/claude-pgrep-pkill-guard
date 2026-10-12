@@ -386,6 +386,55 @@ function tokens::is_operator() {
   esac
 }
 
+# @description Name the control operator that starts at a `|` or `&` token of the token array, for
+#              a walk that follows one pipeline. The scanner emits each operator character as a
+#              token of its own, so `||` is a pair of `|` tokens, `&&` a pair of `&` tokens and `|&`
+#              a `|` and an `&`. bash accepts none of those pairs with anything between the tokens,
+#              so their being neighbours in the array tells them from a lone `|` or `&`. An `&`
+#              directly before a run of `>` is read as the `&>` or `&>>` redirection operator; the
+#              array has no offsets, so a backgrounding `&` with a space before a `>` (`a & >f b`)
+#              reads the same. The `&` of `2>&1` and `>&` never gets here in a walk that calls
+#              tokens::redirection_step first.
+# @arg $1 tokens_var name of the caller's token array
+# @arg $2 index index of the token to name
+# @arg $3 kind name of the caller's variable that receives the result: `pipe` for `|` and `|&`,
+#         `or`, `and`, `background` for a lone `&`, `redirection` for the `&` of `&>`, and empty
+#         when the token is neither a `|` nor an `&`. Never pass a variable called toks, index,
+#         following, kind_ref or span_ref.
+# @arg $4 span name of the caller's variable that receives the number of tokens the operator
+#         takes; for `redirection` that is the `&` alone, and tokens::redirection_step reads the
+#         rest
+# shellcheck disable=SC2034 # kind_ref and span_ref are the caller's variables, written through the namerefs
+function tokens::list_operator_at() {
+  local -n toks="$1"
+  local -r index="$2"
+  local -n kind_ref="$3" span_ref="$4"
+  local -r following="${toks[index + 1]:-}"
+  kind_ref=''
+  span_ref=1
+  case "${toks[index]}" in
+    '|')
+      kind_ref='pipe'
+      case "${following}" in
+        '|')
+          kind_ref='or'
+          span_ref=2
+          ;;
+        '&') span_ref=2 ;;
+      esac
+      ;;
+    '&')
+      kind_ref='background'
+      if [[ "${following}" == '&' ]]; then
+        kind_ref='and'
+        span_ref=2
+      elif [[ "${following}" =~ ^\>+$ ]]; then
+        kind_ref='redirection'
+      fi
+      ;;
+  esac
+}
+
 # A redirection operator token: an optional file descriptor and then a run of
 # `<` and `>` (`>`, `>>`, `<>`, `<<<`, `2>`), or the `<<-` heredoc operator. The
 # scanner emits the operator without its target, which is the next token.
