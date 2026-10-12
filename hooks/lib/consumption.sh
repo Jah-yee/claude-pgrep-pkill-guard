@@ -456,20 +456,20 @@ function consumption::invocation_is_captured() {
 # @exitcode 1 it does not
 function consumption::next_command_reads_status() {
   local -r command="$1" tokens="$2" target="$3"
-  local idx=0 offset token start=-1 end=-1 words=0
+  local idx=0 offset token start=-1 end=-1 has_word=0
   while IFS=$'\t' read -r offset token; do
     [[ -z "${token}" ]] && continue
     if ((idx > target)) && { [[ "${token}" == ';' ]] || [[ "${token}" == '<NL>' ]]; }; then
       # A separator with no word behind the last one ends nothing: a blank line, a comment line
       # or `; # note` holds no command, and the next command is the one after it.
-      if ((start < 0 || words == 0)); then
+      if ((start < 0 || has_word == 0)); then
         start="$((offset + 1))"
       else
         end="${offset}"
         break
       fi
     elif ((start >= 0)); then
-      words=1
+      has_word=1
     fi
     idx="$((idx + 1))"
   done <<< "${tokens}"

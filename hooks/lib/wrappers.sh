@@ -652,7 +652,9 @@ function wrappers::watch_payload() {
 #              after the pipe (see below), and as the previous stage when it closes right before it.
 #              That next stage may stand on a later line: bash continues a pipeline behind a trailing
 #              `|`, so the newlines there are stepped over, and so are the body and terminator line of
-#              a heredoc the producer's line opened (`cat <<EOF |`, the body, then `bash`).
+#              a heredoc the producer's line opened (`cat <<EOF |`, the body, then `bash`). Inside a
+#              group, a stage on the next line behind a pipe that carries nothing the reader can
+#              follow (`{ cat |`, newline, `bash; }`) is read as reading the group's stdin.
 #              Past the pipe nothing else changes: the payload is handed to the
 #              same machinery, so an operand still displaces stdin, a `-c` still claims the payload instead,
 #              `-s` still keeps stdin as the script, and the prefix chain is still followed.
@@ -790,10 +792,10 @@ function wrappers::shell_wrapper_payloads() {
   local watch_active=0 watch_exec=0 watch_dd=0 watch_first='' watch_first_set=0
   local -a watch_rest=()
   local pipe_heredoc='' pipe_text='' pipe_text_set=0 last_pipe_offset=-1
-  # `pipe_open` says the last token read was a pipe: bash continues the pipeline on the next line
-  # there, so newlines, and the body and terminator line of a heredoc the lines before it opened,
-  # are stepped over with the carry intact. `body_end` is the offset where that body's terminator
-  # line starts.
+  # `pipe_open` says no word of the next stage has been read since a pipe: bash continues the
+  # pipeline on the next line there, so newlines, and the body and terminator line of a heredoc
+  # the lines before it opened, are stepped over with the carry intact. `body_end` is the offset
+  # where that body's terminator line starts.
   local pipe_open=0 body_end=-1
   local pending_text='' pending_text_set=0 pending_piped=0
   # A `<<` heredoc operator may carry a leading fd (`0<<`, `3<<-`), which is
@@ -827,11 +829,20 @@ function wrappers::shell_wrapper_payloads() {
 
     if ((pipe_open == 1)); then
       case "${token}" in
-        '<NL>') continue ;;
+        '<NL>')
+          # A pipe that carries nothing the reader can follow (`cat |`, `tee f |`, a filter) may
+          # still hand on the stdin of the group it sits in. The stage on the next line is read as
+          # reading that stdin, which fails closed.
+          if [[ -z "${pipe_heredoc}" ]] && ((pipe_text_set == 0)); then
+            seg_piped=0
+          fi
+          continue
+          ;;
         '<HD:'*'>') ;;
         *)
-          # The body's lines and the terminator line are filler, one token a line.
-          if ((offset <= body_end)) && [[ "${token}" != *[!$'\001']* ]]; then
+          # Every token inside the body's span is body text, the `$` word of a substitution
+          # included, and the terminator line is one token of filler at the span's end.
+          if ((offset < body_end)) || { ((offset == body_end)) && [[ "${token}" != *[!$'\001']* ]]; }; then
             continue
           fi
           pipe_open=0
