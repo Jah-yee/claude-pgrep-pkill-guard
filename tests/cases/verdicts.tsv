@@ -1383,3 +1383,52 @@
 "while true; do pgrep --full x | sort | head; echo ${PIPESTATUS[0]}; break; done"	deny:loop
 "while true; do pgrep --full x | sort | tee >(wc -l); [ -f s ] && break; done"	deny:loop
 "while true; do pgrep --full x | grep -v grep | grep y; [ -f stop ] && break; sleep 1; done"	allow
+"while a; do break; done; while true; do pgrep --full x && echo up; sleep 1; done"	warn
+"for i in 1 2; do exit 1; done; while true; do pgrep --full x && echo up; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; sleep 1; done; while a; do break; done"	warn
+"while true; do pgrep --full x && echo up; sleep 1; done; for i in 1; do exit 1; done"	warn
+"while a; do for i in 1; do break; done; done; while true; do pgrep --full x && echo up; sleep 1; done"	warn
+"while a; do break; done & while true; do pgrep --full x && echo up; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; for i in 1; do break; done; sleep 1; done"	warn
+"while true; do for i in 1; do break; done; pgrep --full x && echo up; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; for i in 1; do for j in 1; do break 2; done; done; sleep 1; done"	warn
+"while true; do break; for i in 1 2; do pgrep --full x && echo up; done; sleep 1; done"	warn
+"while true; do for i in 1 2; do pgrep --full x && echo up; done; exit 0; done"	warn
+"for i in 1 2; do while true; do pgrep --full x && echo up; sleep 1; done; break; done"	warn
+"while true; do while b; do pgrep --full x && echo up; done; sleep 1; done"	warn
+"while true; do if ! pgrep --full x; then for i in 1 2; do echo gone; done; break; fi; sleep 1; done"	deny:loop
+"while true; do if ! pgrep --full x; then echo gone; break; fi; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do echo; done; break; done"	deny:loop
+"while true; do pgrep --full x && echo up; break; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do exit 1; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do return 1; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break 2; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do for j in 1; do break 3; done; done; sleep 1; done"	deny:loop
+"while true; do for i in 1; do exit 1; done; pgrep --full x && echo up; sleep 1; done"	deny:loop
+"while true; do for i in 1; do break 2; done; pgrep --full x && echo up; sleep 1; done"	deny:loop
+"while true; do [ -f stop ] && break; pgrep --full x && echo up; sleep 1; done"	deny:loop
+"while true; do for i in 1 2; do pgrep --full x && echo up; break; done; sleep 1; done"	deny:loop
+"while true; do while b; do pgrep --full x && echo up; exit 1; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; while b; do exit 3; done; done"	deny:loop
+"for i in 1; do echo; done; while true; do pgrep --full x && echo up; break; done"	deny:loop
+"while a; do break; done; while true; do pgrep --full x && echo up; break; done"	deny:loop
+"while a; do break; done; while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; sleep 1; done"	allow
+"while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; for i in 1; do echo; done; break; done"	deny:task-poll
+"while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && break; sleep 1; done"	deny:task-poll
+"while true; do pgrep --full x && echo up; break 09; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break 08; done; sleep 1; done"	deny:loop
+"while true; do for i in 1; do break 08; done; pgrep --full x && echo up; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break \"2\"; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break -- 2; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break $n; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break 0; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break 9999999999999999999; done; sleep 1; done"	deny:loop
+"while true; do pgrep --full x && echo up; for i in 1; do break 1; done; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; for i in 1; do break 01; done; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; for i in 1; do break 2>/dev/null; done; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; for i in 1; do break\ndone; sleep 1; done"	warn
+"while true; do pgrep --full x && echo up; for i in 1; do break && echo; done; sleep 1; done"	warn
+"while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; for i in 1; do break \"2\"; done; sleep 1; done"	deny:task-poll
+"while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; break 08; done"	deny:task-poll
+"while true; do [ -s /tmp/claude-1000/x/tasks/abc.output ] && echo y; for i in 1; do break; done; sleep 1; done"	allow

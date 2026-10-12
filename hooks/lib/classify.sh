@@ -27,9 +27,10 @@ readonly TASK_OUTPUT_PATH_RE='claude-[0-9]+/[^[:space:]]*/tasks/[^[:space:]/]+\.
 #              `F=<task>; F=/other; until [ -s "$F" ]; do sleep 5; done` still reports the first
 #              path (accepted limit -- rebinding a poll target mid-script to dodge this is not a
 #              pattern worth chasing). Only cond position, or body position with a
-#              break/exit/return, is a poll: a lone read, a `while read ...; done < <path>` (the
-#              path sits after `done`), and an echoed loop (its keywords are masked, so
-#              loops::loop_context sees no loop) all report nothing.
+#              break/exit/return that can end the loop (loops::body_has_terminator), is a poll: a
+#              lone read, a `while read ...; done < <path>` (the path sits after `done`), and an
+#              echoed loop (its keywords are masked, so loops::loop_context sees no loop) all report
+#              nothing.
 # @arg $1 command the raw command string
 # @arg $2 tokens the token stream from scanner::scan_command
 # @stdout the polled path, starting at `claude-`, when one is found
