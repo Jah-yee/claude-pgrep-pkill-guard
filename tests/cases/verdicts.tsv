@@ -1304,3 +1304,19 @@
 "pgrep --full x | xargs kill &"	deny:kill
 "pgrep --full x | grep -v a 2>&1 | xargs kill"	deny:kill
 "pgrep --full x | xargs kill 2>&1 | tee f"	deny:kill
+"(pgrep --full x || true) | xargs kill"	deny:kill
+"(pgrep --full x && true) | xargs kill"	deny:kill
+"(pgrep --full x & wait) | xargs kill"	deny:kill
+"{ pgrep --full x || true; } | xargs kill"	deny:kill
+"echo $(pgrep --full x || true) | xargs kill"	deny:kill
+"pgrep --full x | (grep -v y || true) | xargs kill"	deny:kill
+"pgrep --full x | (grep -v y && true) | xargs kill"	deny:kill
+"pgrep --full x | (grep -v y || xargs kill)"	deny:kill
+"pgrep --full x | { grep -v y || xargs kill; }"	deny:kill
+"(pgrep --full x || true) && echo y | xargs kill"	warn
+"(pgrep --full x || true); echo y | xargs kill"	warn
+"pgrep --full x || (echo y | xargs kill)"	warn
+"pgrep --full x || { echo y | xargs kill; }"	warn
+"pgrep --full x | (grep -v y || true) || kill 1"	warn
+"pgrep --full x | xargs &> /dev/null kill"	deny:kill
+"pgrep --full x |& time -p xargs kill"	deny:kill
