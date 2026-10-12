@@ -22,8 +22,8 @@
 # at a redirection operator: a run of `<` and `>` is a token of its own, with the
 # digits of a file descriptor before it (`2>`, `10<`), and its target is the next
 # token (`>f` is `>`, `f`). An `&` that touches a `>` behind it is the `&>` or
-# `&>>` operator and one token with it, unless it is the second `&` of `&&`,
-# the `&` of `|&` or the `&` of `>&`; an `&` with space before the `>` puts a
+# `&>>` operator and one token with it, unless it is the second byte of `&&` or
+# `|&`, or the `&` of `>&` or `<&`; an `&` with space before the `>` puts a
 # command in the background. A `<` or `>` inside arithmetic is a comparison and
 # is masked, so it does not split.
 #
@@ -308,7 +308,7 @@ BEGIN {
   # Tokenize the masked string. Newline is emitted as the literal token <NL>
   # so it survives a line-oriented reader. A heredoc body's marker is emitted
   # at the body's first byte, right after the <NL> that opened it.
-  word = ""; start = 0; m = 0; op_end = 0; dup_at = 0
+  word = ""; start = 0; m = 0; op_end = 0; dup_at = 0; pair_at = 0
   for (i = 1; i <= n; i++) {
     if (m < hb_n && i == hb_start[m]) {
       if (word != "") { print (start - 1) "\t" word "\n"; word = "" }
@@ -322,8 +322,11 @@ BEGIN {
       if (word != "") { print (start - 1) "\t" word "\n"; word = "" }
       # `&>` and `&>>` redirect, and only the bytes can tell them from a
       # backgrounding `&` in front of a redirection (`a & >f b`).
-      if (ch == "&" && i != op_end && substr(masked, i + 1, 1) == ">" \
-          && (i == 1 || index("&|", substr(masked, i - 1, 1)) == 0)) {
+      # The second byte of `&&`, `||` or `|&` starts nothing, and the byte
+      # after such a pair starts afresh: `|&&>f` is `|&` and then `&>`.
+      nx = substr(masked, i + 1, 1)
+      if (i != pair_at && ((ch == "&" && nx == "&") || (ch == "|" && (nx == "|" || nx == "&")))) pair_at = i + 1
+      else if (ch == "&" && i != op_end && i != pair_at && nx == ">") {
         start = i; word = "&>"; i++
         if (substr(masked, i + 1, 1) == ">") { i++; word = word ">" }
         print (start - 1) "\t" word "\n"; word = ""
