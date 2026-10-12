@@ -281,18 +281,23 @@ function loops::body_has_terminator() {
 #              "$p"; done` (head_idx is the `while` token itself, invoked from the forward pipeline
 #              scan). Either way this walks forward past the head's condition/iterable list to find
 #              the matching `do`, then scans that body (respecting nested do/done depth, the way
-#              loops::body_has_terminator does) for a command-position `kill`. A loop whose body never
+#              loops::body_has_terminator does) for a command-position `kill`, as
+#              scanner::find_invocations recorded them, so one behind a prefix and its options
+#              (`do sudo -u root kill "$p"`) counts. A loop whose body never
 #              kills (`for f in $(pgrep -f java); do echo "$f"; done`) must return 1 so the caller
 #              falls through to the ordinary warn path.
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
-# @arg $3 head_idx index of the `in`/`while`/`until` token whose body's `do` follows
+# @arg $3 kills_var name of the caller's array holding an entry at the index of every `kill` in
+#         command position
+# @arg $4 head_idx index of the `in`/`while`/`until` token whose body's `do` follows
 # @exitcode 0 the loop body kills
 # @exitcode 1 it does not, or no body was found
 function loops::loop_body_has_kill() {
   local -n toks="$1"
-  local -r tokens_var="$1" openers_var="$2" head_idx="$3"
+  local -n kills="$3"
+  local -r tokens_var="$1" openers_var="$2" head_idx="$4"
   # shellcheck disable=SC2034 # written through tokens::redirection_step's nameref, which shellcheck cannot follow
   local idx="$((head_idx + 1))" token found_do=0 body_depth=1 at_cmd=1 redir=''
   local -a pstack=()
@@ -325,10 +330,13 @@ function loops::loop_body_has_kill() {
 
   while ((idx < ${#toks[@]})); do
     token="${toks[idx]}"
-    # A redirection in front of the `kill` (`>f kill "$p"`) leaves command position as it was.
+    # A redirection in front of a loop keyword (`>f done`) leaves command position as it was.
     if tokens::redirection_step "${token}" redir; then
       idx="$((idx + 1))"
       continue
+    fi
+    if [[ -n "${kills[idx]:-}" ]]; then
+      return 0
     fi
     if ((at_cmd == 1)); then
       case "${token}" in
@@ -337,7 +345,6 @@ function loops::loop_body_has_kill() {
           body_depth="$((body_depth - 1))"
           ((body_depth == 0)) && return 1
           ;;
-        'kill') return 0 ;;
       esac
     fi
     # The close of a substitution ends a word, not a command, unless the word is an assignment.

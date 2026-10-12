@@ -132,7 +132,7 @@ function tokens::prefix_value_option() {
         *) return 1 ;;
       esac
       ;;
-    # xargs keeps its option table next to the pipeline scan that also reads it.
+    # The xargs option table is in consumption.sh.
     'xargs') consumption::is_xargs_value_option "${word}" ;;
     *) return 1 ;;
   esac
