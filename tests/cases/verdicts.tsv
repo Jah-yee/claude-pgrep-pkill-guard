@@ -1272,3 +1272,35 @@
 "kill $(echo a; x=$(echo b; pgrep --full X); echo 1)"	warn
 "kill $(cat pidfile; export n=$(pgrep --full X))"	warn
 "kill $(echo 1; x=`pgrep --full X`)"	warn
+"pgrep --full x || kill 1"	warn
+"pgrep --full x && echo y | kill 1"	warn
+"pgrep --full x & echo y | kill 1"	allow
+"pgrep --full x && kill 1"	warn
+"pgrep --full x ; kill 1"	allow
+"pgrep --full x & kill 1"	allow
+"pgrep --full x || xargs kill"	warn
+"pgrep --full x || echo y | xargs kill"	warn
+"pgrep --full x || while read -r p; do kill $p; done"	warn
+"pgrep --full x ||\nkill 1"	warn
+"pgrep --full x 2>&1 || kill 1"	warn
+"pgrep --full x | sort || kill 1"	warn
+"pgrep --full x | sort && echo y | xargs kill"	warn
+"pgrep --full x | xargs echo || kill 1"	warn
+"pgrep --full x | xargs echo && kill 1"	warn
+"pgrep --full x | xargs echo; kill 1"	warn
+"pgrep --full x 2>&1 & kill 1"	allow
+"pgrep --full x 2>&1 | xargs kill"	deny:kill
+"pgrep --full x |& xargs kill"	deny:kill
+"pgrep --full x |& kill 1"	deny:kill
+"pgrep --full x | sort |& xargs kill"	deny:kill
+"pgrep --full x |&\nxargs kill"	deny:kill
+"pgrep --full x |\nxargs kill"	deny:kill
+"pgrep --full x |& sudo -u root xargs kill"	deny:kill
+"pgrep --full x |& while read -r p; do kill $p; done"	deny:kill
+"pgrep --full x &> /dev/null | xargs kill"	deny:kill
+"pgrep --full x >& /dev/null | xargs kill"	deny:kill
+"pgrep --full x > /dev/null 2>&1 | xargs kill"	deny:kill
+"pgrep --full x | xargs kill || echo failed"	deny:kill
+"pgrep --full x | xargs kill &"	deny:kill
+"pgrep --full x | grep -v a 2>&1 | xargs kill"	deny:kill
+"pgrep --full x | xargs kill 2>&1 | tee f"	deny:kill
