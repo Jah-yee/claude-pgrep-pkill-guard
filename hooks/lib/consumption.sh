@@ -14,8 +14,8 @@
 # mandatory belong here. GNU spells `-e`, `-i` and `-l` with an OPTIONAL
 # argument, which the shell can only attach (`-i%`), never separate --
 # so `xargs -i kill {}` runs kill, and listing them would swallow the very
-# command word this scan exists to find. Over-consuming hides a kill; under-
-# consuming only costs a warn, so the doubtful cases stay out.
+# command word tokens::prefix_chain_step is looking for. Over-consuming hides
+# a kill; under-consuming only costs a warn, so the doubtful cases stay out.
 # `-J` is BSD/macOS-only and has no GNU meaning, so it is safe to carry here.
 readonly -a XARGS_VALUE_OPTIONS=(
   '-a' '--arg-file' '-d' '--delimiter' '-E' '-I' '-J' '-L' '-n' '--max-args'
@@ -38,15 +38,17 @@ function consumption::is_xargs_value_option() {
 }
 
 # @description Forward form of consumption::feeds_a_kill: the invocation's output is piped into a `kill`.
-#              `kill` must be the command word of a later pipeline stage, read as
-#              scanner::find_invocations reads command position, through tokens::prefix_chain_step:
-#              prefix words, their options, option values and operands, and assignment words may
-#              stand in front of it (`| xargs kill`, `| sudo -u root xargs -n 1 kill`,
-#              `| xargs timeout 5 kill`), while `pgrep --full x | grep -i kill` merely searches for
-#              the word and `| xargs sudo -u kill echo` names a user. A stage headed by
-#              `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`) defers to
-#              loops::loop_body_has_kill. A stage that opens with a group, a subshell or a
-#              substitution is not read.
+#              `kill` must be the command word of a later pipeline stage, found by stepping
+#              tokens::prefix_chain_step over the stage: prefix words, their options, option values
+#              and operands, and assignment words may stand in front of it (`| xargs kill`,
+#              `| sudo -u root xargs -n 1 kill`, `| xargs timeout 5 kill`), while
+#              `pgrep --full x | grep -i kill` merely searches for the word and
+#              `| xargs sudo -u kill echo` names a user. A `$(...)`, `$((...))`, backtick or
+#              process-substitution region is stepped over whole, as the one word it is
+#              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. A stage
+#              headed by `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`)
+#              defers to loops::loop_body_has_kill. A stage that opens with a group or a subshell is
+#              not read.
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
@@ -57,13 +59,37 @@ function consumption::is_xargs_value_option() {
 # @exitcode 1 it does not
 function consumption::feeds_a_kill_forward() {
   local -n toks="$1"
+  local -n openers="$2"
   local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
   # shellcheck disable=SC2034 # redir and the chain state are written through namerefs, which shellcheck cannot follow
   local idx segment='none' token word prev='none' redir='' chain='' chain_skip=0 chain_operands=0 at_cmd=0
+  local close opener
+  local -a closers=()
+  for close in "${!openers[@]}"; do
+    closers["${openers[close]}"]="${close}"
+  done
   for ((idx = target + 1; idx < ${#toks[@]}; idx++)); do
     token="${toks[idx]}"
-    # A redirection (`| >f xargs kill`, `xargs 2>&1 kill`) is neither a command word nor an operand.
-    tokens::redirection_step "${token}" redir && continue
+    if [[ -n "${closers[idx]:-}" ]]; then
+      # A region is one word of its simple command. The `$` word in front of a `$(` has been
+      # stepped already, and an assignment word holds its backtick region; any other backtick
+      # pair or process substitution is a word of its own.
+      opener="${idx}"
+      idx="${closers[idx]}"
+      # The closing quote of `"$(...)"` is one byte of the scanner's quote filler, and ends the
+      # same word.
+      if [[ "${toks[idx + 1]:-}" == $'\001' ]]; then
+        idx="$((idx + 1))"
+      fi
+      if [[ "${token}" == '(' ]] \
+        || tokens::region_holds_assignment "${tokens_var}" "${openers_var}" "${opener}"; then
+        continue
+      fi
+      token='procsub'
+    elif tokens::redirection_step "${token}" redir; then
+      # A redirection (`| >f xargs kill`, `xargs 2>&1 kill`) is neither a command word nor an operand.
+      continue
+    fi
     word="${token##*/}"
     case "${token}" in
       '|')
@@ -73,6 +99,7 @@ function consumption::feeds_a_kill_forward() {
         at_cmd=1
         chain='pipe'
         chain_skip=0
+        # shellcheck disable=SC2034 # read through tokens::prefix_chain_step's nameref
         chain_operands=0
         prev='|'
         continue
@@ -88,10 +115,10 @@ function consumption::feeds_a_kill_forward() {
     esac
     prev="${word}"
     [[ "${segment}" == 'head' ]] || continue
-    # The braces of an `xargs -I{}` placeholder are tokens of their own. Behind a prefix they are
-    # an option's value or an argument, not a group, and the word after them can still be the
-    # command (`xargs -I{} kill {}`).
-    if [[ "${token}" == '{' || "${token}" == '}' ]] && tokens::is_prefix_command "${chain}"; then
+    # The braces of an `xargs -I{}` placeholder are tokens of their own. Among xargs's own words
+    # they are an option's value or an argument, not a group, and the word after them can still
+    # be the command (`xargs -I{} kill {}`). Behind any other prefix `{}` is the command it runs.
+    if [[ "${token}" == '{' || "${token}" == '}' ]] && [[ "${chain}" == 'xargs' ]]; then
       chain_skip=0
       at_cmd=1
       continue

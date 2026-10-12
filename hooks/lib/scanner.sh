@@ -79,10 +79,10 @@ function scanner::scan_command() {
 #              word: it is not a command word, and a word glued to an assignment stays part of it.
 #
 #              A `kill` in command position is reported the same way, for the walks that ask whether
-#              a kill consumes an invocation's output: this is the one reading of command position, so
-#              `sudo -u root kill` and `timeout 5 kill` are kills and `sudo -u kill echo` is not. The
-#              `(` of `name=(...)` opens a list of words and not a subshell, and a `kill` among the
-#              words in front of that list's first operator is not reported.
+#              a kill consumes an invocation's output, so `sudo -u root kill` and `timeout 5 kill`
+#              are kills and `sudo -u kill echo` is not. The `(` of `name=(...)` opens a list of
+#              words and not a subshell, and a `kill` among the words in front of that list's first
+#              operator is not reported.
 # @arg $1 command the raw command string
 # @arg $2 tokens newline-separated "<offset>\t<token>" records from scanner::scan_command
 # @stdout lines of "<index>\t<offset>\t<basename>", the basename being `pgrep`, `pkill` or `kill`

@@ -221,7 +221,7 @@ function classify::classify_wrapper_payloads() {
 # @stdout allow, warn, inactive (the scanner stream failed its integrity check, here or in a wrapper
 #         payload), or deny:loop / deny:kill / deny:task-poll followed by a tab and the invoked
 #         tool (or, for task-poll, the polled path)
-# shellcheck disable=SC2034 # region and cmd_openers are written through namerefs, which shellcheck cannot follow
+# shellcheck disable=SC2034 # region, cmd_openers and cmd_kills are used through namerefs, unseen by shellcheck
 function classify::classify_command() {
   local -r command="$1" depth="${2:-0}"
   if [[ "${command}" != *pgrep* && "${command}" != *pkill* && "${command}" != *.output* ]]; then
