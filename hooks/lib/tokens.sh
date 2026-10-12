@@ -224,7 +224,7 @@ function tokens::prefix_breaks_chain() {
 # @description Advance command-position tracking by one token and report whether the word AFTER it
 #              is in command position. This is the whole prefix-chain rule, in one place because
 #              scanner::find_invocations, wrappers::shell_wrapper_payloads and
-#              consumption::feeds_a_kill_forward all need it and a second copy would drift.
+#              consumption::pipeline_feeds all need it and a second copy would drift.
 #
 #              An operator or keyword restores command position and clears the chain, except that a
 #              `|` leaves the sentinel `pipe` in it, because `time` is the reserved word only in a
