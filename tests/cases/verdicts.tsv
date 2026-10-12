@@ -1229,3 +1229,35 @@
 "pgrep --full X | nice {} kill"	allow
 "pgrep --full X | sudo {} kill"	allow
 "pgrep --full X | timeout 5 {} kill"	allow
+"kill $(sudo pgrep --full X)"	deny:kill
+"kill $(env pgrep --full X)"	deny:kill
+"kill $(timeout 5 pgrep --full X)"	deny:kill
+"kill $(FOO=1 pgrep --full X)"	deny:kill
+"kill $(command pgrep --full X)"	deny:kill
+"kill `sudo pgrep --full X`"	deny:kill
+"for p in $(sudo pgrep --full X); do kill $p; done"	deny:kill
+"kill $(sudo -u root pgrep --full X)"	deny:kill
+"kill $(sudo -u root env FOO=1 timeout 5 pgrep --full X)"	deny:kill
+"kill $(time pgrep --full X)"	deny:kill
+"kill $(! pgrep --full X)"	deny:kill
+"kill $(echo a; pgrep --full X)"	deny:kill
+"kill $(cd /tmp && pgrep --full X)"	deny:kill
+"kill $(true | pgrep --full X)"	deny:kill
+"kill $( { pgrep --full X; } )"	deny:kill
+"kill $(echo a ; (pgrep --full X))"	deny:kill
+"kill $(if true; then pgrep --full X; fi)"	deny:kill
+"kill $(while read -r l; do pgrep --full X; done < f)"	deny:kill
+"kill $(echo a; echo $(pgrep --full X))"	deny:kill
+"kill `echo a; pgrep --full X`"	deny:kill
+"kill -9 foo $(echo a; sudo -u root pgrep --full X)"	deny:kill
+"sudo -u root kill $(echo a; pgrep --full X)"	deny:kill
+"for p in $(echo a; pgrep --full X); do kill $p; done"	deny:kill
+"echo $(sudo pgrep --full X)"	warn
+"echo kill $(echo a; pgrep --full X)"	warn
+"echo $(kill 1; pgrep --full X)"	warn
+"kill 1; echo $(echo a; pgrep --full X)"	warn
+"kill 1 $(echo a) ; echo $(pgrep --full X)"	warn
+"x=$(echo a; pgrep --full X); kill 1"	warn
+"for p in $(echo a; pgrep --full X); do echo $p; done"	warn
+"kill $(echo a) ; pgrep --full X"	allow
+"kill <(echo a; pgrep --full X)"	allow
