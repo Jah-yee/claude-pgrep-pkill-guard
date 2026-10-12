@@ -248,8 +248,9 @@ function classify::classify_command() {
   #
   # cmd_openers is sparse: the entry at the index of a token that closes a `$(...)`, `$((...))`,
   # backtick or process-substitution region holds the index of the token that opened it, so that
-  # consumption::feeds_a_kill_backward can step over a whole region. For a process substitution
-  # that is the `<` or `>` before the `(`, which belongs to the same word.
+  # a walk over the array can step over a whole region, or find the one that holds an invocation.
+  # For a process substitution that is the `<` or `>` before the `(`, which belongs to the same
+  # word.
   local -a cmd_tokens=() cmd_openers=() open_stack=()
   local -A region=()
   local raw_offset raw_token region_kind

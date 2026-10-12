@@ -153,25 +153,28 @@ function consumption::feeds_a_kill_forward() {
 
 # @description Backward form of consumption::feeds_a_kill: `kill $(pgrep ...)`, `kill -9 foo $(pgrep ...)`,
 #              and the backtick equivalent. Here `kill` precedes the invocation, so the forward scan
-#              cannot see it. Walk back to the nearest `kill` in the same simple command: the
+#              cannot see it. Walk back to the nearest `kill` the substitution is a word of: the
 #              substitution punctuation, flags and literal operands (`kill -s TERM foo $(pgrep ...)`)
 #              are all arguments of that `kill` and are stepped over, and so is any earlier whole
 #              `$(...)`, `$((...))`, backtick or process-substitution region (`kill $(true) $(pgrep ...)`,
 #              `kill <(true) $(pgrep ...)`), which is one word of it. An operator or a keyword
-#              inside the `$(...)` or backtick region that holds the invocation means the invocation
-#              is not that region's first command (`kill $(cd /tmp && pgrep ...)`,
+#              inside the `$(...)`, `$((...))` or backtick region that holds the invocation means the
+#              invocation is not that region's first word (`kill $(cd /tmp && pgrep ...)`,
 #              `kill $(time pgrep ...)`, `kill $(if a; then pgrep ...; fi)`): its output is still the
 #              region's, so the walk goes on from the region's opener, and from the opener of each
-#              region around that one in turn. An operator or a keyword outside every such region
-#              ends the walk. The `kill` must then be in command position, as scanner::find_invocations
-#              recorded it (`sudo -u root kill $(...)`, `timeout 5 kill $(...)`) -- otherwise
+#              region around that one in turn. It does not once it has left a region an assignment
+#              word holds (`kill $(echo 1; x=$(pgrep ...))`): the variable has the output, not the
+#              `kill`. An operator or a keyword outside every such region ends the walk. The `kill`
+#              must then be in command position, as scanner::find_invocations recorded it
+#              (`sudo -u root kill $(...)`, `timeout 5 kill $(...)`) -- otherwise
 #              `echo kill $(...)`, where `kill` is merely an argument word, would be denied -- and one
 #              that is not is an argument word like any other, so the walk goes on to a real `kill`
 #              before it (`kill foo kill $(...)`). A bare `in` is only a for/select head -- and thus worth
 #              deferring to loops::loop_body_has_kill -- when the token two back (past the loop
-#              variable) is actually `for`/`select`; otherwise it is an ordinary argument word
-#              (`echo in $(...)`) and the forward walk in loops::loop_body_has_kill could cross into
-#              an unrelated later loop's body.
+#              variable) is actually `for`/`select`; otherwise the forward walk in
+#              loops::loop_body_has_kill could cross into an unrelated later loop's body, and the
+#              walk ends. A for/select head whose body has no `kill` is a keyword like any other
+#              (`kill $(for i in $(pgrep ...); do echo "$i"; done)`).
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
@@ -185,7 +188,7 @@ function consumption::feeds_a_kill_backward() {
   local -n openers="$2"
   local -n kills="$3"
   local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
-  local word k="$((target - 1))" span close opener outer
+  local word k="$((target - 1))" span close opener enclosing captured=0 stop
   while ((k >= 0)); do
     # A redirection between the substitution's opener and the invocation
     # (`kill $(>f pgrep ...)`) is skipped whole, target included.
@@ -200,39 +203,50 @@ function consumption::feeds_a_kill_backward() {
       continue
     fi
     word="${toks[k]##*/}"
+    stop=0
     case "${word}" in
-      '$' | '(' | '`') ;;
+      '$') ;;
+      '(' | '`')
+        # A closer was stepped over above, so this one opens a region the walk is leaving.
+        if tokens::region_holds_assignment "${tokens_var}" "${openers_var}" "${k}"; then
+          captured=1
+        fi
+        ;;
       'kill')
         if [[ -n "${kills[k]:-}" ]]; then
           return 0
         fi
         ;;
       'in')
-        if ((k >= 2)) && { [[ "${toks[k - 2]}" == 'for' ]] || [[ "${toks[k - 2]}" == 'select' ]]; }; then
-          loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${kills_var}" "${k}" && return 0
+        if ((k < 2)) || [[ "${toks[k - 2]}" != 'for' && "${toks[k - 2]}" != 'select' ]]; then
+          return 1
         fi
-        return 1
+        loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${kills_var}" "${k}" && return 0
+        stop=1
         ;;
       *)
         if tokens::is_operator "${toks[k]}" || tokens::is_keyword "${toks[k]}"; then
-          # The innermost `$(...)` or backtick region that opens before this token and closes
-          # after the invocation. A process substitution hands over a file name, not the output,
-          # and its opener is a `<` or `>`.
-          outer=-1
-          for close in "${!openers[@]}"; do
-            opener="${openers[close]}"
-            ((opener < k && opener > outer && close > target)) || continue
-            if [[ "${toks[opener]}" == '`' ]] \
-              || { [[ "${toks[opener]}" == '(' ]] && ((opener > 0)) && [[ "${toks[opener - 1]}" == *'$' ]]; }; then
-              outer="${opener}"
-            fi
-          done
-          ((outer >= 0)) || return 1
-          k="${outer}"
-          continue
+          stop=1
         fi
         ;;
     esac
+    if ((stop == 1)); then
+      ((captured == 0)) || return 1
+      # The innermost `$(...)`, `$((...))` or backtick region that opens before this token and
+      # closes after the invocation. A process substitution is not one: its opener is a `<` or `>`.
+      enclosing=-1
+      for close in "${!openers[@]}"; do
+        opener="${openers[close]}"
+        ((opener < k && opener > enclosing && close > target)) || continue
+        if [[ "${toks[opener]}" == '`' ]] \
+          || { [[ "${toks[opener]}" == '(' ]] && ((opener > 0)) && [[ "${toks[opener - 1]}" == *'$' ]]; }; then
+          enclosing="${opener}"
+        fi
+      done
+      ((enclosing >= 0)) || return 1
+      k="${enclosing}"
+      continue
+    fi
     k="$((k - 1))"
   done
   return 1
