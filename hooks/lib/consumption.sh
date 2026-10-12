@@ -48,7 +48,10 @@ function consumption::is_xargs_value_option() {
 #              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. A stage
 #              headed by `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`)
 #              defers to loops::loop_body_has_kill. A stage that opens with a group or a subshell is
-#              not read.
+#              not read. The scan follows the invocation's own pipeline and no further: `|` and `|&`
+#              carry it into the next stage, and `||`, `&&`, a lone `&`, `;` and a newline that does
+#              not follow a pipe end it, because what stands behind them reads nothing the
+#              invocation wrote (`pgrep --full x || kill 1`, `pgrep --full x & echo y | xargs kill`).
 # @arg $1 tokens_var name of the caller's token array
 # @arg $2 openers_var name of the caller's array mapping the index of each token that closes a
 #         region to the index of the token that opened it
@@ -63,7 +66,7 @@ function consumption::feeds_a_kill_forward() {
   local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
   # shellcheck disable=SC2034 # redir and the chain state are written through namerefs, which shellcheck cannot follow
   local idx segment='none' token word prev='none' redir='' chain='' chain_skip=0 chain_operands=0 at_cmd=0
-  local close opener
+  local close opener operator span
   local -a closers=()
   for close in "${!openers[@]}"; do
     closers["${openers[close]}"]="${close}"
@@ -91,19 +94,28 @@ function consumption::feeds_a_kill_forward() {
       continue
     fi
     word="${token##*/}"
+    if [[ "${token}" == '|' || "${token}" == '&' ]]; then
+      tokens::list_operator_at "${tokens_var}" "${idx}" operator span
+      case "${operator}" in
+        'pipe')
+          # The `pipe` sentinel is the one tokens::prefix_chain_step leaves after a `|`: a `time`
+          # there is GNU time, with options of its own.
+          segment='head'
+          at_cmd=1
+          chain='pipe'
+          chain_skip=0
+          # shellcheck disable=SC2034 # read through tokens::prefix_chain_step's nameref
+          chain_operands=0
+          prev='|'
+          idx="$((idx + span - 1))"
+          continue
+          ;;
+        # The `&` of `&>`: tokens::redirection_step takes the `>` and its target from here.
+        'redirection') continue ;;
+        *) break ;;
+      esac
+    fi
     case "${token}" in
-      '|')
-        # The `pipe` sentinel is the one tokens::prefix_chain_step leaves after a `|`: a `time`
-        # there is GNU time, with options of its own.
-        segment='head'
-        at_cmd=1
-        chain='pipe'
-        chain_skip=0
-        # shellcheck disable=SC2034 # read through tokens::prefix_chain_step's nameref
-        chain_operands=0
-        prev='|'
-        continue
-        ;;
       ';') break ;;
       '<NL>')
         # A newline after a trailing `|` continues the pipeline -- bash does
