@@ -162,30 +162,102 @@ function loops::loop_context() {
   printf 'none\n'
 }
 
+# @description True when a break, exit or return found inside a loop body can end the loop whose
+#              body is asked about. Each body is known by an id, and a path is the ids of the bodies
+#              open at a token, outermost first. A terminator whose path does not hold the body sits
+#              outside it. An `exit` or `return` anywhere inside the body ends its loop. A `break`
+#              leaves one loop for each count, its own first, so it reaches the body's loop only
+#              when its count exceeds the number of loops nested inside the body around it.
+# @arg $1 kind `break`, `exit` or `return`
+# @arg $2 count the count of a `break`, in decimal with no leading zero; ignored for the others
+# @arg $3 path the ids of the bodies open at the terminator, space-separated, outermost first
+# @arg $4 body the id of the body asked about
+# @exitcode 0 the terminator ends that body's loop
+# @exitcode 1 it does not
+function loops::terminator_ends_body() {
+  local -r kind="$1" count="$2" path="$3" body="$4"
+  local -a ids=()
+  local position found=-1
+  # The entry script's IFS has no space in it.
+  IFS=' ' read -r -a ids <<< "${path}"
+  for position in "${!ids[@]}"; do
+    if [[ "${ids[position]}" == "${body}" ]]; then
+      found="${position}"
+    fi
+  done
+  ((found >= 0)) || return 1
+  [[ "${kind}" == 'break' ]] || return 0
+  if ((count > ${#ids[@]} - 1 - found)); then
+    return 0
+  fi
+  return 1
+}
+
 # @description True when the loop body enclosing an invocation contains a break, exit or return in
 #              command position, which makes a body-position pgrep the effective termination test.
+#              The body is the innermost one that holds the invocation. A terminator counts when it
+#              can end that body's loop, as loops::terminator_ends_body decides. It may stand before
+#              the invocation or after it, after a nested loop has closed, or inside a nested loop.
+#              One in a loop that closed before this body opened, in a loop that opens after it
+#              closes, or in a body around it does not count. A `break` with no count leaves its own
+#              loop; one whose count the text does not give as a small number (`break "2"`,
+#              `break $n`, `break 0`) is taken to leave every loop.
 #              A `$(`, a backtick, or a plain `(` opens a scope barrier, mirroring loops::loop_context: a
 #              `do`/`done`/`break` inside a substitution belongs to the shell that substitution runs,
-#              so it must neither pop the enclosing body's depth nor count as its terminator. Without
-#              the barrier a literal `done` inside `$( )` zeroed the depth and hid a real `break` that
+#              so it must neither close the enclosing body nor count as its terminator. Without
+#              the barrier a literal `done` inside `$( )` closed the body and hid a real `break` that
 #              followed it, and loops::loop_context (which has the barrier) answered `body` for the same
 #              command -- two readers of one structure disagreeing (#8). The barrier is opaque in
-#              both directions: while one is open, every loop keyword is ignored.
+#              both directions: while one is open, every loop keyword is ignored, so a loop that sits
+#              wholly inside one has no body here.
 # @arg $1 command the raw command string
 # @arg $2 tokens the token stream from scanner::scan_command
 # @arg $3 target index of the invocation token
-# @exitcode 0 a terminator is present in the enclosing body
-# @exitcode 1 no terminator
+# @exitcode 0 a terminator in the enclosing body can end its loop
+# @exitcode 1 none can
 function loops::body_has_terminator() {
   local -r command="$1" tokens="$2" target="$3"
-  local depth=0 seen=0 at_cmd=1 idx=0 dollar=0 offset token redir='' kind closed_assign=0 tail_end=-1 glued_tail
+  local seen=0 at_cmd=1 idx=0 dollar=0 offset token redir='' kind closed_assign=0 tail_end=-1 glued_tail
+  local next_body=0 body='' pending='' count record
   local -a word_assign=()
   local -a barrier=()
+  # The ids of the open bodies, outermost first, each written as a space and the id, and the
+  # terminators met before the invocation, one `kind:count:path` row each.
+  local open=''
+  local -a earlier=()
   # shellcheck disable=SC2034 # read through tokens::region_opens_assignment_value's nameref
   local -A region=()
   while IFS=$'\t' read -r offset token; do
     [[ -z "${token}" ]] && continue
-    ((idx == target)) && seen=1
+    if [[ -n "${pending}" ]]; then
+      # The word after a `break` is its count. An operator or a redirection there means it has
+      # none. A count that is not a small literal number (`"2"`, `--`, `$n`, `0`, which bash
+      # rejects by leaving every loop) is read as one no nesting outlasts.
+      if tokens::is_operator "${token}" || [[ "${token}" =~ ${REDIRECTION_OPERATOR_RE} ]]; then
+        count=1
+      elif [[ "${token}" =~ ^0*([1-9][0-9]{0,3})$ ]]; then
+        count="${BASH_REMATCH[1]}"
+      else
+        count=10000
+      fi
+      if ((seen == 0)); then
+        earlier+=("break:${count}:${pending}")
+      elif loops::terminator_ends_body 'break' "${count}" "${pending}" "${body}"; then
+        return 0
+      fi
+      pending=''
+    fi
+    if ((idx == target)); then
+      seen=1
+      # No body is open: nothing here is a terminator of the invocation's loop.
+      [[ -n "${open}" ]] || return 1
+      body="${open##* }"
+      for record in "${earlier[@]}"; do
+        IFS=':' read -r kind count pending <<< "${record}"
+        loops::terminator_ends_body "${kind}" "${count}" "${pending}" "${body}" && return 0
+      done
+      pending=''
+    fi
     tokens::region_step "${command}" "${offset}" "${token}" region kind
     closed_assign=0
     glued_tail=0
@@ -221,12 +293,29 @@ function loops::body_has_terminator() {
     fi
     if ((at_cmd == 1 && ${#barrier[@]} == 0)); then
       case "${token}" in
-        'do') depth="$((depth + 1))" ;;
-        'done')
-          ((seen == 1 && depth > 0)) && return 1
-          ((depth > 0)) && depth="$((depth - 1))"
+        'do')
+          next_body="$((next_body + 1))"
+          open+=" ${next_body}"
           ;;
-        'break' | 'exit' | 'return') ((depth > 0)) && return 0 ;;
+        'done')
+          if [[ -n "${open}" ]]; then
+            # The invocation's own body closing ends the search: nothing behind it is in the body.
+            if ((seen == 1)) && [[ "${open##* }" == "${body}" ]]; then
+              return 1
+            fi
+            open="${open% *}"
+          fi
+          ;;
+        'break') pending="${open}" ;;
+        'exit' | 'return')
+          if [[ -n "${open}" ]]; then
+            if ((seen == 0)); then
+              earlier+=("${token}:0:${open}")
+            elif loops::terminator_ends_body "${token}" 0 "${open}" "${body}"; then
+              return 0
+            fi
+          fi
+          ;;
       esac
     fi
     case "${token}" in
@@ -269,6 +358,10 @@ function loops::body_has_terminator() {
     fi
     idx="$((idx + 1))"
   done <<< "${tokens}"
+  # A `break` that is the last word of the command.
+  if [[ -n "${pending}" ]] && ((seen == 1)); then
+    loops::terminator_ends_body 'break' 1 "${pending}" "${body}" && return 0
+  fi
   return 1
 }
 
@@ -280,8 +373,8 @@ function loops::body_has_terminator() {
 #              token, invoked from the backward scan) and `pgrep -f java | while read -r p; do kill
 #              "$p"; done` (head_idx is the `while` token itself, invoked from the forward pipeline
 #              scan). Either way this walks forward past the head's condition/iterable list to find
-#              the matching `do`, then scans that body (respecting nested do/done depth, the way
-#              loops::body_has_terminator does) for a command-position `kill`, as
+#              the matching `do`, then scans that body (respecting nested do/done depth) for a
+#              command-position `kill`, as
 #              scanner::find_invocations recorded them, so one behind a prefix and its options
 #              (`do sudo -u root kill "$p"`) counts. A loop whose body never
 #              kills (`for f in $(pgrep -f java); do echo "$f"; done`) must return 1 so the caller
