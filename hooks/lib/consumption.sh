@@ -144,8 +144,6 @@ function consumption::pipeline_feeds() {
           idx="$((idx + span - 1))"
           continue
           ;;
-        # The `&` of `&>`: tokens::redirection_step takes the `>` and its target from here.
-        'redirection') continue ;;
         'or' | 'and')
           # Whatever stands behind it runs or not by the status of the pipeline so far.
           if [[ "${seek}" == 'count' ]] && ((detached == 0)); then
