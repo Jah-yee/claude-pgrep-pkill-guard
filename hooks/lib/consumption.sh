@@ -37,18 +37,25 @@ function consumption::is_xargs_value_option() {
   return 1
 }
 
-# @description Forward form of consumption::feeds_a_kill: the invocation's output is piped into a `kill`.
-#              `kill` must be the command word of a later pipeline stage, found by stepping
-#              tokens::prefix_chain_step over the stage: prefix words, their options, option values
-#              and operands, and assignment words may stand in front of it (`| xargs kill`,
-#              `| sudo -u root xargs -n 1 kill`, `| xargs timeout 5 kill`), while
+# @description True when a later stage of the invocation's pipeline does what the caller asks
+#              about. Asked about `kill`, this is the forward form of consumption::feeds_a_kill: the
+#              invocation's output is piped into a `kill`. Asked about `count`, it is the pipeline
+#              half of consumption::result_is_consumed: the output is piped into `wc` or `xargs`, or
+#              the pipeline's status is tested by a `&&` or `||` behind it.
+#
+#              The word looked for must be the command word of a later pipeline stage, found by
+#              stepping tokens::prefix_chain_step over the stage: prefix words, their options, option
+#              values and operands, and assignment words may stand in front of it (`| xargs kill`,
+#              `| sudo -u root xargs -n 1 kill`, `| xargs timeout 5 kill`, `| sudo wc -l`), while
 #              `pgrep --full x | grep -i kill` merely searches for the word and
 #              `| xargs sudo -u kill echo` names a user. A `$(...)`, `$((...))`, backtick or
 #              process-substitution region is stepped over whole, as the one word it is
-#              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. A stage
-#              headed by `while`/`until` (`pgrep -f java | while read -r p; do kill "$p"; done`)
-#              defers to loops::loop_body_has_kill. A stage that opens with a group or a subshell is
-#              not read. The scan follows the invocation's own pipeline and no further: `|` and `|&`
+#              (`| xargs -P $(nproc) kill`), and a pipe inside it is not this pipeline's. Asked about
+#              `kill`, a stage headed by `while`/`until`
+#              (`pgrep -f java | while read -r p; do kill "$p"; done`) defers to
+#              loops::loop_body_has_kill. A stage that opens with a group or a subshell is not read.
+#
+#              The scan follows the invocation's own pipeline and no further: `|` and `|&`
 #              carry it into the next stage, and `;` and a newline that does not follow a pipe end
 #              it. `||`, `&&` and a lone `&` end it too, because what stands behind them reads
 #              nothing the invocation wrote (`pgrep --full x || kill 1`,
@@ -63,12 +70,13 @@ function consumption::is_xargs_value_option() {
 # @arg $3 kills_var name of the caller's array holding an entry at the index of every `kill` in
 #         command position
 # @arg $4 target index of the invocation token
-# @exitcode 0 a kill consumes the output downstream
-# @exitcode 1 it does not
-function consumption::feeds_a_kill_forward() {
+# @arg $5 seek `kill` or `count`
+# @exitcode 0 a later stage kills with the output, or counts it or tests the pipeline's status
+# @exitcode 1 none does
+function consumption::pipeline_feeds() {
   local -n toks="$1"
   local -n openers="$2"
-  local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
+  local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4" seek="$5"
   # shellcheck disable=SC2034 # redir and the chain state are written through namerefs, which shellcheck cannot follow
   local idx segment='none' token word prev='none' redir='' chain='' chain_skip=0 chain_operands=0 at_cmd=0
   local close opener operator span depth=0 nest ahead closer
@@ -117,6 +125,12 @@ function consumption::feeds_a_kill_forward() {
           ;;
         # The `&` of `&>`: tokens::redirection_step takes the `>` and its target from here.
         'redirection') continue ;;
+        'or' | 'and')
+          # Whatever stands behind it runs or not by the status of the pipeline so far.
+          if [[ "${seek}" == 'count' ]]; then
+            return 0
+          fi
+          ;;
       esac
       idx="$((idx + span - 1))"
       if ((depth > 0)); then
@@ -189,9 +203,9 @@ function consumption::feeds_a_kill_forward() {
       continue
     fi
     if ((at_cmd == 1)); then
-      case "${word}" in
-        'kill') return 0 ;;
-        'while' | 'until')
+      case "${seek}:${word}" in
+        'kill:kill' | 'count:wc' | 'count:xargs') return 0 ;;
+        'kill:while' | 'kill:until')
           loops::loop_body_has_kill "${tokens_var}" "${openers_var}" "${kills_var}" "${idx}" && return 0
           segment='other'
           continue
@@ -315,7 +329,7 @@ function consumption::feeds_a_kill_backward() {
 
 # @description True when the invocation's output feeds a kill, either forward (`pgrep ... | xargs
 #              kill`, `... | while read p; do kill "$p"; done`) or backward (`kill $(pgrep ...)`).
-#              The scans are independent; see consumption::feeds_a_kill_forward and
+#              The scans are independent; see consumption::pipeline_feeds and
 #              consumption::feeds_a_kill_backward.
 # @arg $1 tokens_var name of the caller's token array (built once by classify::classify_command; every
 #         invocation in the same command reuses it rather than re-parsing the token stream)
@@ -327,7 +341,7 @@ function consumption::feeds_a_kill_backward() {
 # @exitcode 1 it does not
 function consumption::feeds_a_kill() {
   local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4"
-  consumption::feeds_a_kill_forward "${tokens_var}" "${openers_var}" "${kills_var}" "${target}" \
+  consumption::pipeline_feeds "${tokens_var}" "${openers_var}" "${kills_var}" "${target}" 'kill' \
     || consumption::feeds_a_kill_backward "${tokens_var}" "${openers_var}" "${kills_var}" "${target}"
 }
 
@@ -432,21 +446,26 @@ function consumption::next_command_reads_status() {
 # @description True when an invocation's result is read as a boolean, a count, or captured into a
 #              variable, rather than merely displayed. Only then can the silent off-by-one produce a
 #              wrong conclusion. These shapes count: pgrep's own `--count` / `-c`; an enclosing `if`
-#              or `elif`, or a leading `!`, which read the exit status as a boolean; a following
-#              `&&`, `||`, `| wc` or `| xargs`; sitting inside a command substitution; and the next
-#              command in the list reading `$?`, which consumption::next_command_reads_status handles. A
-#              redirection target is not consumption: `2>&1` tokenizes as `2>`, `&`, `1`, and a lone
-#              trailing `&` is backgrounding rather than a boolean operator.
+#              or `elif`, or a leading `!`, which read the exit status as a boolean; `wc` or `xargs`
+#              as the command of a later stage of the invocation's pipeline, or a `&&` or `||` behind
+#              that pipeline, which consumption::pipeline_feeds finds; sitting inside a command
+#              substitution; and the next command in the list reading `$?`, which
+#              consumption::next_command_reads_status handles. A pipeline that only passes the output
+#              on (`| sort | head`) displays it, and a lone `&` is backgrounding rather than a
+#              boolean operator.
 # @arg $1 tokens_var name of the caller's token array, built once by classify::classify_command
-# @arg $2 target index of the invocation token
-# @arg $3 args the invocation's argument lines
-# @arg $4 command the raw command string, for the `$?` check
-# @arg $5 tokens the token stream from scanner::scan_command, for the `$?` check
+# @arg $2 openers_var name of the caller's region-opener array, built alongside the token array
+# @arg $3 kills_var name of the caller's array holding an entry at the index of every `kill` in
+#         command position
+# @arg $4 target index of the invocation token
+# @arg $5 args the invocation's argument lines
+# @arg $6 command the raw command string, for the `$?` check
+# @arg $7 tokens the token stream from scanner::scan_command, for the `$?` check
 # @exitcode 0 the result is consumed
 # @exitcode 1 the result is only displayed
 function consumption::result_is_consumed() {
   local -n toks="$1"
-  local -r tokens_var="$1" target="$2" args="$3" command="$4" tokens="$5"
+  local -r tokens_var="$1" openers_var="$2" kills_var="$3" target="$4" args="$5" command="$6" tokens="$7"
   local offset token
   while IFS=$'\t' read -r offset token; do
     [[ -z "${token}" ]] && continue
@@ -488,35 +507,7 @@ function consumption::result_is_consumed() {
     k="$((k - 1))"
   done
 
-  local idx prev="${toks[target]}" amp=0 pipe=0
-  for ((idx = target + 1; idx < ${#toks[@]}; idx++)); do
-    token="${toks[idx]}"
-    # A redirection target is not consumption: `2>&1` tokenizes as `2>` `&` `1`.
-    # The `<NL>` token is spelled with angle brackets and so ends in `>`: it has
-    # to be excluded by name, or the word after a newline-continued pipe reads
-    # as a redirection target and is skipped.
-    if [[ "${prev}" != '<NL>' && "${prev}" == *[\<\>] ]]; then
-      prev="${token}"
-      continue
-    fi
-    case "${token}" in
-      '&')
-        amp="$((amp + 1))"
-        ((amp >= 2)) && return 0
-        ;;
-      '|')
-        pipe="$((pipe + 1))"
-        ((pipe >= 2)) && return 0
-        ;;
-      'wc' | 'xargs') ((pipe >= 1)) && return 0 ;;
-      ';') break ;;
-      # As in consumption::feeds_a_kill_forward: a newline right after a trailing `|` continues the
-      # pipeline, so a `wc -l` on the next line is still consumption.
-      '<NL>') [[ "${prev}" == '|' ]] || break ;;
-      *) amp=0 ;;
-    esac
-    prev="${token}"
-  done
+  consumption::pipeline_feeds "${tokens_var}" "${openers_var}" "${kills_var}" "${target}" 'count' && return 0
 
   # `p=$(pgrep ...)`: the output is captured rather than printed.
   consumption::invocation_is_captured "${tokens_var}" "${target}" && return 0

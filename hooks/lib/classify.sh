@@ -162,7 +162,8 @@ function classify::classify_invocation() {
       return 0
       ;;
     'body')
-      if consumption::result_is_consumed "${tokens_var}" "${idx}" "${args}" "${command}" "${tokens}" \
+      if consumption::result_is_consumed "${tokens_var}" "${openers_var}" "${kills_var}" "${idx}" "${args}" \
+        "${command}" "${tokens}" \
         && loops::body_has_terminator "${command}" "${tokens}" "${idx}"; then
         printf 'deny:loop\t%s\n' "${name}"
         return 0
@@ -170,7 +171,8 @@ function classify::classify_invocation() {
       ;;
   esac
   ((ignores_ancestors == 1)) && return 1
-  if consumption::result_is_consumed "${tokens_var}" "${idx}" "${args}" "${command}" "${tokens}"; then
+  if consumption::result_is_consumed "${tokens_var}" "${openers_var}" "${kills_var}" "${idx}" "${args}" \
+    "${command}" "${tokens}"; then
     printf 'warn\n'
     return 0
   fi
