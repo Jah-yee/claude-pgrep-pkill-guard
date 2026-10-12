@@ -256,8 +256,8 @@ function classify::classify_command() {
   # word.
   #
   # The scanner masks a comment like a quoted string, to one token of filler. The array holds
-  # COMMENT_TOKEN in its place, so that a walk can tell a comment, which is no word of any
-  # command, from a quoted word.
+  # COMMENT_TOKEN for a token of filler that starts at a `#`, so that a walk can tell a comment,
+  # which is no word of any command, from a quoted word.
   local -a cmd_tokens=() cmd_openers=() open_stack=()
   local -A region=()
   local raw_offset raw_token region_kind

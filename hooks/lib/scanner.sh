@@ -75,7 +75,8 @@ function scanner::scan_command() {
 #              it stood at the opener, found by tokens::region_step. A `$(` is saved after its `$` word
 #              was stepped, so `FOO=$(true) pkill` keeps command position; a backtick or a `<`/`>` is
 #              saved before it and the close steps the one word it stands for, unless it touches a
-#              word before it. A token that touches the close (`$(true)pkill`) continues the same
+#              word before it or is the target of a redirection (`> >(cat) pkill`, ``> `echo f` pkill``),
+#              which is no word of the command. A token that touches the close (`$(true)pkill`) continues the same
 #              word: it is not a command word, and a word glued to an assignment stays part of it.
 #
 #              A `kill` in command position is reported the same way, for the walks that ask whether
@@ -113,8 +114,9 @@ function scanner::find_invocations() {
     fi
     # A process substitution right behind a redirection operator is that redirection's target
     # (`> >(cat) pkill`), not a word: its own `<` or `>` was read as the target and left no
-    # redirection pending, where the `>` of a word on its own (`tee >(cat)`) still has one.
-    if [[ "${kind}" == 'S' && -z "${redir}" ]]; then
+    # redirection pending, where the `>` of a word on its own (`tee >(cat)`) still has one. A
+    # backtick region is a target when a redirection is pending at its opener.
+    if [[ "${kind}" == 'S' && -z "${redir}" ]] || [[ "${kind}" == 'B' && -n "${redir}" ]]; then
       glued_open=1
     fi
     case "${kind}" in

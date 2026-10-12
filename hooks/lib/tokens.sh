@@ -27,17 +27,15 @@ readonly -a COMMAND_POSITION_KEYWORDS=(
 # (`watch 'pkill --full X'`); the chain cannot see into a quoted one, so
 # wrappers::shell_wrapper_payloads reads it as a payload.
 #
-# `coproc` is bash's reserved word and not a program, so it is a prefix only as the first word
-# of a command, where tokens::prefix_chain_step admits it: `sudo coproc x` runs a program of
-# that name. `coproc NAME { ...; }` needs nothing more, since NAME ends the chain and the `{`
-# restores command position.
+# `coproc` is bash's reserved word and not a program, so it is a prefix only where bash reads
+# it as one, the first word of a command or the word behind the reserved word `time`, which is
+# where tokens::prefix_chain_step admits it: `sudo coproc x` runs a program of that name. It
+# has no options, so a dash word behind it is the command. `coproc NAME { ...; }` needs
+# nothing more, since NAME ends the chain and the `{` restores command position.
 readonly -a PREFIX_COMMANDS=(
   'sudo' 'doas' 'env' 'nohup' 'command' 'time' 'timeout' 'nice' 'ionice' 'stdbuf' 'setsid'
   'chrt' 'taskset' 'unbuffer' 'watch' 'xargs' 'exec' 'coproc'
 )
-
-# What classify::classify_command puts in the token array in place of a comment.
-readonly COMMENT_TOKEN='<#>'
 
 # @description True when a token is a command prefix that keeps the following word in command
 #              position.
@@ -275,7 +273,8 @@ function tokens::prefix_breaks_chain() {
 #              `|` leaves the sentinel `pipe` in it, because `time` is the reserved word only in a
 #              pipeline's first command. An assignment word in command position leaves the sentinel
 #              `assignment` for the same reason, and the reserved word itself leaves
-#              `time-builtin`. A prefix word opens a chain. Inside a chain, the prefix's own flags
+#              `time-builtin`. A prefix word opens a chain; `coproc` is one only as the first word
+#              of a command or behind the reserved word `time`. Inside a chain, the prefix's own flags
 #              keep command position for what follows, a flag's value is skipped without ever being
 #              in command position itself (`env -u pkill cmd` unsets a variable, it does not run
 #              one), `--` ends the flags, and the operands the prefix is entitled to are spent one
@@ -323,7 +322,7 @@ function tokens::prefix_chain_step() {
   # test runs before the keyword test because `time` is both, and only the
   # prefix reading understands its `-o file`.
   if ((at_cmd == 1)) && tokens::is_prefix_command "${word}" \
-    && [[ "${word}" != 'coproc' || ("${token}" == 'coproc' && "${chain_ref}" =~ ^(pipe)?$) ]]; then
+    && [[ "${word}" != 'coproc' || ("${token}" == 'coproc' && "${chain_ref}" =~ ^(pipe|time-builtin)?$) ]]; then
     # `time` is bash's reserved word only as the very first word of a command:
     # `time -o f cmd` runs `-o`, not GNU time. Behind a prefix (`env time`,
     # `sudo -u bob time`) or an assignment (`FOO=1 time`) the word is one those
@@ -374,7 +373,7 @@ function tokens::prefix_chain_step() {
       chain_ref=''
       return 1
     fi
-    if [[ "${word}" == -* ]]; then
+    if [[ "${word}" == -* && "${chain_ref}" != 'coproc' ]]; then
       # A flag's value is never itself in command position, but the word after
       # it is; a flag that takes no value keeps command position directly.
       if tokens::prefix_value_option "${chain_ref}" "${word}"; then

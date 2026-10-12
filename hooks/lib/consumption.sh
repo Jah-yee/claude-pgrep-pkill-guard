@@ -23,6 +23,9 @@ readonly -a XARGS_VALUE_OPTIONS=(
   '-P' '--max-procs' '-s' '--max-chars' '--process-slot-var'
 )
 
+# What classify::classify_command puts in the token array in place of a comment.
+readonly COMMENT_TOKEN='<#>'
+
 # @description True when a token is an xargs option that consumes the following word as its value.
 #              Matches the exact option only: an attached spelling (`-n1`, `--max-args=1`) carries
 #              its own value and must not also eat the next word.
@@ -62,7 +65,8 @@ function consumption::is_xargs_value_option() {
 #
 #              The scan follows the invocation's own pipeline and no further: `|` and `|&`
 #              carry it into the next stage, and `;` and a newline that does not follow a pipe end
-#              it. Comments and blank lines behind a trailing pipe do not. Asked about `count`, a `&&` or `||` is the answer. Asked about `kill`, `||`, `&&`
+#              it. Comments and blank lines behind a trailing pipe do not.
+#              Asked about `count`, a `&&` or `||` is the answer. Asked about `kill`, `||`, `&&`
 #              and a lone `&` end the scan, because what stands behind them reads
 #              nothing the invocation wrote (`pgrep --full x || kill 1`,
 #              `pgrep --full x & echo y | xargs kill`) -- unless a group or subshell holds them.
