@@ -650,6 +650,9 @@ function wrappers::watch_payload() {
 #              very NEXT stage, since an intermediate one (`cat <<EOF | tee f | bash`) can change the text on
 #              the way. A group, subshell or compound command counts as that next stage when it opens right
 #              after the pipe (see below), and as the previous stage when it closes right before it.
+#              That next stage may stand on a later line: bash continues a pipeline behind a trailing
+#              `|`, so the newlines there are stepped over, and so are the body and terminator line of
+#              a heredoc the producer's line opened (`cat <<EOF |`, the body, then `bash`).
 #              Past the pipe nothing else changes: the payload is handed to the
 #              same machinery, so an operand still displaces stdin, a `-c` still claims the payload instead,
 #              `-s` still keeps stdin as the script, and the prefix chain is still followed.
@@ -787,6 +790,11 @@ function wrappers::shell_wrapper_payloads() {
   local watch_active=0 watch_exec=0 watch_dd=0 watch_first='' watch_first_set=0
   local -a watch_rest=()
   local pipe_heredoc='' pipe_text='' pipe_text_set=0 last_pipe_offset=-1
+  # `pipe_open` says the last token read was a pipe: bash continues the pipeline on the next line
+  # there, so newlines, and the body and terminator line of a heredoc the lines before it opened,
+  # are stepped over with the carry intact. `body_end` is the offset where that body's terminator
+  # line starts.
+  local pipe_open=0 body_end=-1
   local pending_text='' pending_text_set=0 pending_piped=0
   # A `<<` heredoc operator may carry a leading fd (`0<<`, `3<<-`), which is
   # ordinary redirection syntax; only fd 0 (empty or explicit `0`) feeds the
@@ -816,6 +824,20 @@ function wrappers::shell_wrapper_payloads() {
   while IFS=$'\t' read -r offset token; do
     [[ -z "${token}" ]] && continue
     word="${token##*/}"
+
+    if ((pipe_open == 1)); then
+      case "${token}" in
+        '<NL>') continue ;;
+        '<HD:'*'>') ;;
+        *)
+          # The body's lines and the terminator line are filler, one token a line.
+          if ((offset <= body_end)) && [[ "${token}" != *[!$'\001']* ]]; then
+            continue
+          fi
+          pipe_open=0
+          ;;
+      esac
+    fi
 
     # Heredoc bookkeeping. A bare `<<` / `<<-` token, fd-prefixed or not, is
     # followed by its delimiter as a separate word, which must not be spent
@@ -861,6 +883,7 @@ function wrappers::shell_wrapper_payloads() {
       # Kept for a wrapper that claims it later: a group's producer reads a body
       # that sits inside the group, before the wrapper after the pipe is seen.
       hd_body[body_seq]="${command:offset:len}"
+      body_end="$((offset + len))"
       if [[ "${wanted}" == *" ${body_seq} "* ]]; then
         printf '%s\0' "${hd_body[body_seq]}"
       fi
@@ -1176,6 +1199,8 @@ function wrappers::shell_wrapper_payloads() {
         fi
         last_pipe_offset="${offset}"
         seg_piped=1
+        pipe_open=1
+        body_end=-1
       elif [[ "${token}" == '|' ]]; then
         # The second `|` of a `||`, which is a conditional list and not a pipe:
         # nothing crosses it, so drop what the first `|` armed.
@@ -1186,6 +1211,7 @@ function wrappers::shell_wrapper_payloads() {
       elif [[ "${token}" == '&' ]] && ((last_pipe_offset == offset - 1)); then
         # `|&` extends the pipe it follows, so the carry it armed stands.
         last_pipe_offset="${offset}"
+        pipe_open=1
       else
         wrappers::pipe_carry_clear pipe_heredoc pipe_text pipe_text_set
         seg_piped=0

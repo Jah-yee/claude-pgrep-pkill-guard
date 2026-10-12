@@ -23,9 +23,6 @@ readonly -a XARGS_VALUE_OPTIONS=(
   '-P' '--max-procs' '-s' '--max-chars' '--process-slot-var'
 )
 
-# What classify::classify_command puts in the token array in place of a comment.
-readonly COMMENT_TOKEN='<#>'
-
 # @description True when a token is an xargs option that consumes the following word as its value.
 #              Matches the exact option only: an attached spelling (`-n1`, `--max-args=1`) carries
 #              its own value and must not also eat the next word.
@@ -209,8 +206,6 @@ function consumption::pipeline_feeds() {
         [[ "${prev}" == '|' ]] || break
         continue
         ;;
-      # A comment is no word: after a trailing `|` the pipeline goes on behind it.
-      "${COMMENT_TOKEN}") continue ;;
     esac
     prev="${word}"
     # The braces of an `xargs -I{}` placeholder are tokens of their own. Among xargs's own words
@@ -448,7 +443,9 @@ function consumption::invocation_is_captured() {
 #              pattern cannot split it.
 #
 #              Scope is deliberately one command, not the rest of the list: in `pgrep --full x; echo
-#              hi; rc=$?` the status belongs to `echo`, and warning there would be wrong. The cost of
+#              hi; rc=$?` the status belongs to `echo`, and warning there would be wrong. That command
+#              is the first one with a word in it: a blank line or a comment line between the two
+#              holds no command and changes no status. The cost of
 #              reading raw text is a single-quoted literal `$?` counting as a read, and any text
 #              that spells `PIPESTATUS`; that direction only over-warns, and no realistic command
 #              writes either right after a pgrep without reading it.
@@ -459,16 +456,20 @@ function consumption::invocation_is_captured() {
 # @exitcode 1 it does not
 function consumption::next_command_reads_status() {
   local -r command="$1" tokens="$2" target="$3"
-  local idx=0 offset token start=-1 end=-1
+  local idx=0 offset token start=-1 end=-1 words=0
   while IFS=$'\t' read -r offset token; do
     [[ -z "${token}" ]] && continue
     if ((idx > target)) && { [[ "${token}" == ';' ]] || [[ "${token}" == '<NL>' ]]; }; then
-      if ((start < 0)); then
+      # A separator with no word behind the last one ends nothing: a blank line, a comment line
+      # or `; # note` holds no command, and the next command is the one after it.
+      if ((start < 0 || words == 0)); then
         start="$((offset + 1))"
       else
         end="${offset}"
         break
       fi
+    elif ((start >= 0)); then
+      words=1
     fi
     idx="$((idx + 1))"
   done <<< "${tokens}"
